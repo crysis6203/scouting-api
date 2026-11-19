@@ -6,7 +6,7 @@ export const meritBadgeProgress = defineTool({
 	name: "meritBadgeProgress",
 	title: "Who is working on a merit badge",
 	description:
-		"For one merit badge, lists the troop's scouts who have started it (and not yet earned it) with the requirements each has completed. Give `requirement` (e.g. '8') to see only scouts who have started the badge but not completed that requirement. Use for 'who has started Communication and still needs requirement 8?'. Looks the badge up by name and handles the BSA member IDs this API needs.",
+		"For one merit badge, lists the troop's scouts who have started it (and not yet earned or been leader approved for it) with the requirements each has completed. Give `requirement` (e.g. '8') to see only scouts who have started the badge but not completed that requirement. Use for 'who has started Communication and still needs requirement 8?'. Looks the badge up by name and handles the BSA member IDs this API needs.",
 	readOnly: true,
 	requiresAuth: true,
 	input: z.object({
@@ -75,16 +75,24 @@ export const meritBadgeProgress = defineTool({
 
 		const want = norm(args.requirement ?? "").replace(/\.$/, "");
 		const rows = [];
+		const couldNotCheck: string[] = [];
 		for (const p of progress) {
 			const s = byMember.get(Number(p.memberId));
 			if (!s) continue;
 			const reqs: Any[] = p.requirements ?? [];
 			const completed = reqs.filter((r) => r.dateCompleted || r.leaderApprovedDate);
-			const earned = Boolean(p.dateEarned) || p.status === "Awarded";
+			const earned =
+				Boolean(p.dateEarned) || p.status === "Awarded" || p.status === "Leader Approved";
 			const started = Boolean(p.status) || reqs.some((r) => r.status || r.dateCompleted);
 			if (!started) continue;
 			if (earned && !args.includeEarned) continue;
 			const done = completed.map((r) => label.get(String(r.id)) ?? String(r.id));
+			// Scouts who started an older version of the badge have requirement ids that
+			// do not match today's numbering, so a requirement check on them is unreliable
+			if (want && completed.some((r) => !label.has(String(r.id)))) {
+				couldNotCheck.push(nameOf(s));
+				continue;
+			}
 			if (want) {
 				const target = reqs.find((r) => norm(label.get(String(r.id))) === want);
 				const targetDone = target && (target.dateCompleted || target.leaderApprovedDate);
@@ -107,7 +115,8 @@ export const meritBadgeProgress = defineTool({
 				requirementFilter: args.requirement,
 				count: rows.length,
 				scouts: rows,
-				note: "Started means Scoutbook has a status or a completed requirement for the scout. A requirement that offers choices (such as 'do ONE of the following') shows only the parts completed.",
+				couldNotCheck: couldNotCheck.length ? couldNotCheck : undefined,
+				note: "Leader Approved counts as earned. couldNotCheck lists scouts who worked on an older version of the badge, whose requirements cannot be matched to the current numbers. Started means Scoutbook has a status or a completed requirement for the scout. A requirement that offers choices (such as 'do ONE of the following') shows only the parts completed.",
 			},
 		};
 	},

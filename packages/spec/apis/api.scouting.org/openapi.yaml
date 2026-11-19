@@ -2168,10 +2168,10 @@ paths:
     get:
       tags: [Advancement]
       operationId: getMembersBalanceDetails
-      x-untested: Results depend on the signed-in account's positions and units, and the response shape has not been captured yet
+      x-untested: Results depend on the signed-in account's positions and units
       summary: Get members' account balances
       description: >-
-        Returns the unit's per-member account balances, as shown on a scout's profile page in Scoutbook. The response shape is not captured yet.
+        Returns the unit's per-member account balances, as shown on a scout's profile page in Scoutbook. Includes every account in the unit, former members and adults too. fromDate or toDate is required.
       security:
         - bearer: []
       parameters:
@@ -2197,7 +2197,28 @@ paths:
           content:
             application/json:
               schema:
-                description: Shape not captured yet, so this accepts any JSON value
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [userId, personGuid, memberId, firstName, lastName, balanceDetails]
+                  properties:
+                    userId: {type: integer}
+                    personGuid: {type: string}
+                    memberId: {type: integer}
+                    firstName: {type: string}
+                    middleName: {type: [string, "null"]}
+                    lastName: {type: string}
+                    nameSuffix: {type: [string, "null"]}
+                    nickName: {type: [string, "null"]}
+                    balanceDetails:
+                      type: object
+                      additionalProperties: false
+                      required: [totalCredits, totalCharges, balance]
+                      properties:
+                        totalCredits: {type: number, description: "Sum of payments and credits"}
+                        totalCharges: {type: number, description: "Sum of charges, as a negative number"}
+                        balance: {type: number, description: "Credits plus charges. Negative means the member owes the unit."}
         "401":
           $ref: "#/components/responses/Unauthorized"
 
@@ -2205,10 +2226,10 @@ paths:
     get:
       tags: [Advancement]
       operationId: getUnitPaymentLogSummary
-      x-untested: Results depend on the signed-in account's positions and units, and the response shape has not been captured yet
+      x-untested: Results depend on the signed-in account's positions and units
       summary: Get a unit's payment log summary
       description: >-
-        Returns a summary of the unit's payment logs. The response shape is not captured yet.
+        Returns the unit's account totals: cash, fees receivable, assets, liabilities and net assets.
       security:
         - bearer: []
       parameters:
@@ -2224,7 +2245,16 @@ paths:
           content:
             application/json:
               schema:
-                description: Shape not captured yet, so this accepts any JSON value
+                type: object
+                additionalProperties: false
+                required: [totalCash, feesReceivable, totalAssets, totalLiabilities, netAssets, cashAvailable]
+                properties:
+                  totalCash: {type: number}
+                  feesReceivable: {type: number}
+                  totalAssets: {type: number}
+                  totalLiabilities: {type: number}
+                  netAssets: {type: number}
+                  cashAvailable: {type: number}
         "401":
           $ref: "#/components/responses/Unauthorized"
 

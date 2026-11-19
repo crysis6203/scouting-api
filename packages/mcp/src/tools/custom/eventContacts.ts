@@ -24,6 +24,9 @@ type Contact = { email: string | null; phone: string | null };
 // Leaders with no scout in the troop have no email in Scoutbook's rosters, so
 // they come from a small local file: [{ "name": "Pat Example", "email": "...", "phone": "..." }].
 // Set SCOUTING_LEADER_CONTACTS to use another path.
+// Addresses Scoutbook fills in when a parent has none; mail to them goes nowhere
+const PLACEHOLDER = /^(changeyouremail@scoutbook\.com|multipleacct@scouting\.org)$/i;
+
 export function leaderContacts(): { byName: Map<string, Contact>; path: string; note?: string } {
 	const path =
 		process.env["SCOUTING_LEADER_CONTACTS"] ??
@@ -262,7 +265,8 @@ export const eventContacts = defineTool({
 				start: String(e.startDate).slice(0, 16).replace("T", " "),
 				count: attendees.length,
 				attendees,
-				emailList: [...emails].sort(),
+				emailList: [...emails].filter((e) => !PLACEHOLDER.test(e)).sort(),
+				placeholderEmails: [...emails].filter((e) => PLACEHOLDER.test(e)).sort(),
 				missing,
 				leaderStatusCounts: counts,
 				leaders,
