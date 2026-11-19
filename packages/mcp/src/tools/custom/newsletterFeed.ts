@@ -55,7 +55,7 @@ export const newsletterFeed = defineTool({
 	name: "newsletterFeed",
 	title: "Weekly newsletter (ITCs) data",
 	description:
-		"Short data feed for the weekly ITCs troop newsletter: upcoming troop events (times in Central), RSVP lists for events that have RSVPs turned on (scouts who said yes, alphabetical, no adults), and current scout leadership positions. Optional: a small birthdays line (placed just before leadership) with includeBirthdays. Events within `weeks` weeks (default 4). Weekly troop meetings are flagged isMeeting so they can be left out.",
+		"Short data feed for the weekly ITCs troop newsletter: upcoming troop events (times in Central), RSVP lists for events that have RSVPs turned on (scouts who said yes, alphabetical, no adults), and current scout leadership positions. Optional: a small birthdays line (placed just before leadership) with includeBirthdays. Events within `weeks` weeks (default 4). Weekly troop meetings are flagged isMeeting so they can be left out. Events whose Scoutbook Notes start with 'Newsletter: <title>' come back with newsletter/newsletterDetails (extra lines in the notes are card details); 'Newsletter skip' sets newsletterSkip.",
 	readOnly: true,
 	requiresAuth: true,
 	input: z.object({
@@ -105,12 +105,31 @@ export const newsletterFeed = defineTool({
 			const s = central(e.startDate);
 			const en = e.endDate ? central(e.endDate) : null;
 			const multiDay = en && en.ymd !== s.ymd;
+			// Chris flags events for the newsletter in the Scoutbook event Notes field:
+			// first line "Newsletter: Card title", following lines are card details.
+			// "Newsletter skip" leaves the event out.
+			const lines = String(e.notes ?? "")
+				.split(/\r?\n/)
+				.map((l) => l.trim())
+				.filter(Boolean);
+			const tag = lines.findIndex((l) => /^newsletter\b/i.test(l));
+			const skip = tag >= 0 && /^newsletter\s+skip\b/i.test(lines[tag] as string);
+			const flagged =
+				tag >= 0 && !skip
+					? {
+							newsletter: (lines[tag] as string).replace(/^newsletter\s*:?\s*/i, "").trim() || String(e.name),
+							newsletterDetails: lines.slice(tag + 1),
+						}
+					: {};
 			return {
 				title: e.name,
 				date: multiDay ? `${s.date} – ${en.date}` : `${s.date}, ${s.time}`,
 				startYmd: s.ymd,
 				details: e.location ? [e.location] : [],
 				isMeeting: /troop meeting|weekly meeting|no meeting/i.test(String(e.name)),
+				...flagged,
+				...(skip ? { newsletterSkip: true } : {}),
+				rsvpEnabled: Boolean(e.rsvp),
 			};
 		});
 
