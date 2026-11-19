@@ -2164,6 +2164,60 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /advancements/v2/organization/{organizationGuid}/balanceDetails:
+    get:
+      tags: [Advancement]
+      operationId: getMembersBalanceDetails
+      x-untested: Results depend on the signed-in account's positions and units, and the response shape has not been captured yet
+      summary: Get members' account balances
+      description: >-
+        Returns the unit's per-member account balances, as shown on a scout's profile page in Scoutbook. The response shape is not captured yet.
+      security:
+        - bearer: []
+      parameters:
+        - name: organizationGuid
+          in: path
+          required: true
+          description: The unit's organization GUID
+          schema:
+            $ref: "#/components/schemas/OrganizationGuid"
+      responses:
+        "200":
+          description: The response body, not yet described field by field
+          content:
+            application/json:
+              schema:
+                description: Shape not captured yet, so this accepts any JSON value
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /advancements/v2/organization/{organizationGuid}/paymentLogSummary:
+    get:
+      tags: [Advancement]
+      operationId: getUnitPaymentLogSummary
+      x-untested: Results depend on the signed-in account's positions and units, and the response shape has not been captured yet
+      summary: Get a unit's payment log summary
+      description: >-
+        Returns a summary of the unit's payment logs. The response shape is not captured yet.
+      security:
+        - bearer: []
+      parameters:
+        - name: organizationGuid
+          in: path
+          required: true
+          description: The unit's organization GUID
+          schema:
+            $ref: "#/components/schemas/OrganizationGuid"
+      responses:
+        "200":
+          description: The response body, not yet described field by field
+          content:
+            application/json:
+              schema:
+                description: Shape not captured yet, so this accepts any JSON value
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /advancements/v2/youth/{userId}/ranks:
     get:
       tags: [Advancement]
@@ -12072,7 +12126,7 @@ components:
         dateStarted:
           type: [string, "null"]
         leaderSignedUserId:
-          type: [string, "null"]
+          type: [integer, string, "null"]
         leaderSignedDate:
           type: [string, "null"]
         dateCompleted:
@@ -12080,7 +12134,7 @@ components:
         markedCompletedDate:
           type: [string, "null"]
         markedCompletedUserId:
-          type: [string, "null"]
+          type: [integer, string, "null"]
         markedCompletedFirstName:
           type: [string, "null"]
         markedCompletedLastName:
@@ -12088,9 +12142,9 @@ components:
         percentCompleted:
           type: [number, "null"]
         assignedCounselorUserId:
-          type: [string, "null"]
+          type: [integer, string, "null"]
         counselorApprovedUserId:
-          type: [string, "null"]
+          type: [integer, string, "null"]
         counselorApprovedFirstName:
           type: [string, number, boolean, "null"]
           description: Always null in the captured responses; the type is unconfirmed
@@ -12101,7 +12155,7 @@ components:
           type: [string, number, boolean, "null"]
           description: Always null in the captured responses; the type is unconfirmed
         leaderApprovedUserId:
-          type: [string, "null"]
+          type: [integer, string, "null"]
         leaderApprovedDate:
           type: [string, "null"]
         leaderApprovedFirstName:
@@ -12109,19 +12163,19 @@ components:
         leaderApprovedLastName:
           type: [string, "null"]
         checkedRecordedUserId:
-          type: [string, "null"]
+          type: [integer, string, "null"]
         checkedRecordedDate:
           type: [string, "null"]
         awardedDate:
           type: [string, "null"]
         awardedUserId:
-          type: [string, "null"]
+          type: [integer, string, "null"]
         awardedFirstName:
           type: [string, "null"]
         awardedLastName:
           type: [string, "null"]
         poid:
-          type: [string, "null"]
+          type: [integer, string, "null"]
         status:
           type: [string, "null"]
 

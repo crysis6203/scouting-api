@@ -17,14 +17,14 @@ const PERMISSION_ROLE =
 	/editor|approver|awarder|remover|creator|mbc list|key 3 delegate/i;
 const RESERVE = /scouter reserve/i;
 
-const norm = (v: unknown) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+export const norm = (v: unknown) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
 
 type Contact = { email: string | null; phone: string | null };
 
 // Leaders with no scout in the troop have no email in Scoutbook's rosters, so
 // they come from a small local file: [{ "name": "Pat Example", "email": "...", "phone": "..." }].
 // Set SCOUTING_LEADER_CONTACTS to use another path.
-function leaderContacts(): { byName: Map<string, Contact>; path: string; note?: string } {
+export function leaderContacts(): { byName: Map<string, Contact>; path: string; note?: string } {
 	const path =
 		process.env["SCOUTING_LEADER_CONTACTS"] ??
 		join(homedir(), ".scouting-mcp", "leader-contacts.json");

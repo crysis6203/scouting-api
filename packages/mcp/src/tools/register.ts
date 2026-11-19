@@ -1,10 +1,16 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { ScoutingClient } from "scouting-api";
 import { operations as apiOperations } from "./generated/api.scouting.org/index.ts";
+import { auditAdvancement } from "./custom/auditAdvancement.ts";
 import { auditCalendar } from "./custom/auditCalendar.ts";
 import { auditCall } from "./custom/auditCall.ts";
+import { auditRaw } from "./custom/auditRaw.ts";
 import { eventContacts } from "./custom/eventContacts.ts";
 import { eventRsvps } from "./custom/eventRsvps.ts";
+import { contactLookup } from "./custom/contactLookup.ts";
+import { meritBadgeProgress } from "./custom/meritBadgeProgress.ts";
+import { troopAdvancement } from "./custom/troopAdvancement.ts";
+import { troopRoster } from "./custom/troopRoster.ts";
 import { looseOutput } from "./looseOutput.ts";
 import { remainingRequirements } from "./custom/remainingRequirements.ts";
 import { operations as scoutConnectOperations } from "./generated/scoutconnect-api.scouting.org/index.ts";
@@ -15,8 +21,12 @@ const operations = [
 	remainingRequirements,
 	eventRsvps,
 	eventContacts,
+	troopAdvancement,
+	meritBadgeProgress,
+	contactLookup,
+	troopRoster,
 	// Debug only: crawls the API and checks raw responses against the spec
-	...(process.env["SCOUTING_AUDIT"] ? [auditCalendar, auditCall] : []),
+	...(process.env["SCOUTING_AUDIT"] ? [auditAdvancement, auditCalendar, auditCall, auditRaw] : []),
 ];
 
 // Without a sign-in, leaves out the tools that need one
