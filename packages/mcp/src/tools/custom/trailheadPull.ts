@@ -33,6 +33,22 @@ const ageOn = (dob: string | null | undefined, today: Date) => {
 const renewal = (s: unknown) =>
 	String(s ?? "").replace(/\s*\(.*?\)\s*/g, " ").replace(/\s+/g, " ").trim().slice(0, 20) || null;
 
+// Drops the "Resources" video links Scoutbook puts inside requirement text
+const plain = (s: unknown) => clean(String(s ?? "").replace(/<details>[\s\S]*?<\/details>/gi, " "));
+
+// Scoutbook's sortOrder like "1.10" -> a number that sorts 1.2 before 1.10
+const order = (q: Any) => {
+	const [a = "0", b = "0"] = String(q.sortOrder ?? "").split(".");
+	return Number(a) * 1000 + Number(b);
+};
+
+const mbStatus = (b: Any): "awarded" | "completed" | "in_progress" =>
+	b.awardedDate || b.status === "Awarded"
+		? "awarded"
+		: b.leaderApprovedDate || /approved/i.test(String(b.status)) || Number(b.percentCompleted) >= 1
+			? "completed"
+			: "in_progress";
+
 const reqCode = (r: Any) =>
 	(clean(r.requirementNumber) || clean(r.listNumber)).replace(/[().\s]/g, "").slice(0, 10);
 
@@ -42,7 +58,7 @@ export const trailheadPull = defineTool({
 	description: [
 		"Collects the troop roster and Scouts BSA rank data from the Scouting API in the shape Trailhead's sync.php expects: scouts (member ID, name, age, current position, last rank approved, renewal status, expiration), rank requirement lists for every rank version a scout is working on, and each scout's rank progress (in_progress, completed = approved but not yet awarded, awarded).",
 		"Read-only against Scoutbook. By default it only builds the payload and returns a summary (dry run). Set post=true to send it to Trailhead using the TRAILHEAD_URL and TRAILHEAD_API_KEY environment variables; it also logs a run in Trailhead unless logRun=false.",
-		"Does not touch Trailhead's sign-off queue. Merit badges are not included. Takes about 15 seconds.",
+		"Does not touch Trailhead's sign-off queue. Includes merit badges (requirement lists and each scout's progress) unless meritBadges=false. Takes about 30 seconds.",
 	].join(" "),
 	readOnly: true,
 	requiresAuth: true,
@@ -51,6 +67,10 @@ export const trailheadPull = defineTool({
 			.boolean()
 			.optional()
 			.describe("Send the payload to Trailhead. Defaults to false (dry run)."),
+		meritBadges: z
+			.boolean()
+			.optional()
+			.describe("Include merit badges (requirements and each scout's progress). Defaults to true."),
 		logRun: z
 			.boolean()
 			.optional()
@@ -74,15 +94,24 @@ export const trailheadPull = defineTool({
 
 		const scoutsOut: Any[] = [];
 		const progressOut: Any[] = [];
+		const withBadges = args.meritBadges !== false;
+		const mbProgress: Any[] = [];
+		const mbVersions = new Map<
+			string,
+			{ id: number; versionId: number; name: string; version: number; eagle: boolean; needsReqs: boolean }
+		>();
 		const versions = new Map<
 			string,
 			{ rankId: number; versionId: number; name: string; version: number; needsReqs: boolean }
 		>();
 
 		await pool(roster.scouts, 4, async (s: Any) => {
-			const [r, h] = await Promise.all([
+			const [r, h, mb] = await Promise.all([
 				retry(() => api.advancement.listYouthRanks({ userId: s.sbUserId })),
 				retry(() => api.advancement.listYouthLeadershipPositionHistory({ userId: s.sbUserId })),
+				withBadges
+					? retry(() => api.advancement.listYouthMeritBadges({ userId: s.sbUserId }))
+					: Promise.resolve({ data: [] }),
 			]);
 			if (r.error) {
 				failures.push(`${nameOf(s)}: rank lookup failed`);
@@ -117,6 +146,25 @@ export const trailheadPull = defineTool({
 				renewal_status: renewal(s.registrarInfo?.renewalStatus),
 				expiration_date: day(s.registrarInfo?.registrationExpireDt),
 			});
+
+			if (mb.error) failures.push(`${nameOf(s)}: merit badge lookup failed`);
+			for (const b of mb.error ? [] : (mb.data as Any[])) {
+				const version = Number.parseInt(String(b.version), 10);
+				if (!Number.isFinite(version)) continue;
+				const status = mbStatus(b);
+				mbProgress.push({ scout_id: memberId, badge_name: b.name, version_year: version, status });
+				const key = `${b.id}:${b.versionId}`;
+				const entry = mbVersions.get(key) ?? {
+					id: Number(b.id),
+					versionId: Number(b.versionId),
+					name: b.name,
+					version,
+					eagle: Boolean(b.isEagleRequired),
+					needsReqs: false,
+				};
+				if (status === "in_progress") entry.needsReqs = true;
+				mbVersions.set(key, entry);
+			}
 
 			for (const rk of ranks) {
 				const version = Number.parseInt(String(rk.version), 10);
@@ -157,10 +205,6 @@ export const trailheadPull = defineTool({
 			}
 			const reqs: Any[] = res.data.requirements ?? [];
 			const parents = new Set(reqs.map((q) => String(q.parentRequirementId ?? "")).filter(Boolean));
-			const order = (q: Any) => {
-				const [a = "0", b = "0"] = String(q.sortOrder ?? "").split(".");
-				return Number(a) * 1000 + Number(b);
-			};
 			const leaves = reqs
 				.filter((q) => !parents.has(String(q.id)))
 				.sort((x, y) => order(x) - order(y));
@@ -175,14 +219,85 @@ export const trailheadPull = defineTool({
 			return { name: v.name, version_year: v.version, requirements: out };
 		});
 
+		// Merit badge requirement lists for each badge version someone is working on
+		const mbReqs = await pool([...mbVersions.values()], 4, async (v) => {
+			if (!v.needsReqs) return { v, requirements: [] as Any[] };
+			const res = await retry(() =>
+				api.advancement.getMeritBadgeRequirements({ meritBadgeId: v.id, versionId: v.versionId }),
+			);
+			if (res.error) {
+				failures.push(`${v.name} ${v.version}: requirement lookup failed`);
+				return { v, requirements: [] as Any[] };
+			}
+			const reqs: Any[] = res.data.requirements ?? [];
+			const byId = new Map(reqs.map((q) => [String(q.id), q]));
+			const parentIds = new Set(reqs.map((q) => String(q.parentRequirementId ?? "")).filter(Boolean));
+			const codeOf = (q: Any, depth = 0): string => {
+				const rn = clean(q.requirementNumber);
+				if (rn) return rn.slice(0, 15);
+				const ln = clean(q.listNumber).replace(/[().\s]/g, "");
+				if (!ln) return "";
+				const p = depth < 4 ? byId.get(String(q.parentRequirementId ?? "")) : undefined;
+				return (p ? codeOf(p, depth + 1) + ln : ln).slice(0, 15);
+			};
+			const seen = new Set<string>();
+			const out: Any[] = [];
+			[...reqs]
+				.sort((x, y) => order(x) - order(y))
+				.forEach((q) => {
+					const code = codeOf(q);
+					const text = plain(q.name);
+					if (!code || !text || seen.has(code)) return;
+					seen.add(code);
+					const parent = byId.get(String(q.parentRequirementId ?? ""));
+					const parentCode = parent ? codeOf(parent) : "";
+					out.push({
+						code,
+						text,
+						checkable: !parentIds.has(String(q.id)),
+						parent_code: parentCode || null,
+						sort_order: out.length + 1,
+					});
+				});
+			return { v, requirements: out };
+		});
+		const badgeMap = new Map<string, Any>();
+		for (const { v, requirements } of mbReqs) {
+			const badge = badgeMap.get(v.name) ?? { name: v.name, eagle_required: v.eagle, versions: [] };
+			badge.versions.push({
+				version_year: v.version,
+				is_current: v.needsReqs,
+				expiration_date: null,
+				requirements,
+			});
+			badgeMap.set(v.name, badge);
+		}
+		const badgesOut = [...badgeMap.values()];
+
 		scoutsOut.sort((a, b) => a.name.localeCompare(b.name));
-		const payload = { scouts: scoutsOut, ranks: ranksOut, rank_progress: progressOut };
+		const payload: Any = { scouts: scoutsOut, ranks: ranksOut, rank_progress: progressOut };
+		if (withBadges) {
+			payload.merit_badges = badgesOut;
+			payload.merit_badge_progress = mbProgress;
+		}
 		const summary: Any = {
 			scouts: scoutsOut.length,
 			rankVersions: ranksOut.length,
 			requirements: ranksOut.reduce((n, x) => n + x.requirements.length, 0),
 			rankProgressRows: progressOut.length,
 			inProgress: progressOut.filter((p) => p.status === "in_progress").length,
+			meritBadges: withBadges
+				? {
+						badges: badgesOut.length,
+						requirements: badgesOut.reduce(
+							(n: number, b: Any) =>
+								n + b.versions.reduce((m: number, x: Any) => m + x.requirements.length, 0),
+							0,
+						),
+						progressRows: mbProgress.length,
+						inProgress: mbProgress.filter((p) => p.status === "in_progress").length,
+					}
+				: undefined,
 			failures: failures.length ? failures : undefined,
 		};
 
@@ -191,7 +306,11 @@ export const trailheadPull = defineTool({
 				data: {
 					dryRun: true,
 					summary,
-					sample: { scout: scoutsOut[0], rank: ranksOut.find((x) => x.requirements.length) },
+					sample: {
+						scout: scoutsOut[0],
+						rank: ranksOut.find((x) => x.requirements.length),
+						badge: badgesOut.find((b: Any) => b.versions.some((x: Any) => x.requirements.length)),
+					},
 					payload: args.includePayload ? payload : undefined,
 					elapsedSeconds: Math.round((Date.now() - t0) / 100) / 10,
 				},
