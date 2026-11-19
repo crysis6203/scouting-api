@@ -110,12 +110,12 @@ export const newsletterFeed = defineTool({
 				date: multiDay ? `${s.date} – ${en.date}` : `${s.date}, ${s.time}`,
 				startYmd: s.ymd,
 				details: e.location ? [e.location] : [],
-				isMeeting: /troop meeting|weekly meeting/i.test(String(e.name)),
+				isMeeting: /troop meeting|weekly meeting|no meeting/i.test(String(e.name)),
 			};
 		});
 
 		const rsvps = troopEvents
-			.filter((e) => !/troop meeting|weekly meeting/i.test(String(e.name)))
+			.filter((e) => !/troop meeting|weekly meeting|no meeting/i.test(String(e.name)))
 			.map((e) => {
 				const s = central(e.startDate);
 				const base = { title: e.name, when: `${s.date}`, startYmd: s.ymd };
@@ -194,7 +194,11 @@ export const newsletterFeed = defineTool({
 			}
 			out.leadership = [...by.entries()]
 				.sort((a, b) => orderOf(a[0]) - orderOf(b[0]) || a[0].localeCompare(b[0]))
-				.map(([position, names]) => [position, names.sort((a, b) => a.localeCompare(b))]);
+				.map(([position, names]) => [position, [...new Set(names)].sort((a, b) => a.localeCompare(b))]);
+			const doubled = (out.leadership as Any[])
+				.filter(([p, n]) => /^(senior patrol leader|quartermaster|scribe|historian|troop guide)$/i.test(p) && p !== "Scribe" && n.length > 1)
+				.map(([p, n]) => `${p}: ${n.join(" and ")}`);
+			if (doubled.length) out.leadershipCheck = `More than one holder; an old term may need an end date in Scoutbook: ${doubled.join("; ")}`;
 			if (unapproved.length) out.leadershipNotApproved = unapproved;
 			if (failures.length) out.leadershipFailures = failures;
 		}
