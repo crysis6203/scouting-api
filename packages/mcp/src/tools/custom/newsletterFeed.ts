@@ -5,10 +5,12 @@ import {
 	clean,
 	day,
 	daysBetween,
+	earnedDate,
 	nameOf,
 	orgGuidOf,
 	pool,
 	retry,
+	scoutsBsaRanks,
 	troopYouth,
 } from "./troopCommon.ts";
 
@@ -66,7 +68,7 @@ export const newsletterFeed = defineTool({
 	name: "newsletterFeed",
 	title: "Weekly newsletter (ITCs) data",
 	description:
-		"Short data feed for the weekly ITCs troop newsletter: upcoming troop events (times in Central), RSVP lists for events that have RSVPs turned on (scouts who said yes, alphabetical, no adults), and current scout leadership positions. Optional: a small birthdays line (placed just before leadership) with includeBirthdays. Events within `weeks` weeks (default 4). Weekly troop meetings are flagged isMeeting so they can be left out. Events whose Scoutbook Notes start with 'Newsletter: <title>' come back with newsletter/newsletterDetails (card details come from extra lines in the Notes, else from the event Description); 'Newsletter skip' sets newsletterSkip.",
+		"Short data feed for the weekly ITCs troop newsletter: upcoming troop events (times in Central), RSVP lists for events that have RSVPs turned on (scouts who said yes, alphabetical, no adults), and current scout leadership positions. Also `ranksEarned` (scouts who earned a rank in the last `sinceDays`, default 7) with ready-made `introLines`. Optional: a small birthdays line (placed just before leadership) with includeBirthdays. Events within `weeks` weeks (default 4). Weekly troop meetings are flagged isMeeting so they can be left out. Events whose Scoutbook Notes start with 'Newsletter: <title>' come back with newsletter/newsletterDetails (card details come from extra lines in the Notes, else from the event Description); 'Newsletter skip' sets newsletterSkip.",
 	readOnly: true,
 	requiresAuth: true,
 	input: z.object({
@@ -79,6 +81,14 @@ export const newsletterFeed = defineTool({
 			.boolean()
 			.optional()
 			.describe("Add current scout positions. Defaults to true. Takes a few extra seconds."),
+		includeAdvancement: z
+			.boolean()
+			.optional()
+			.describe("Scouts who earned a rank (passed their board of review) recently. Defaults to true."),
+		sinceDays: z
+			.int()
+			.optional()
+			.describe("How far back to look for earned ranks, in days. Defaults to 7."),
 		scoutbookUserId: z.number().optional().describe("Defaults to env SCOUTING_USER_ID."),
 		organizationGuid: z.string().optional().describe("Defaults to Troop 0911."),
 	}),
@@ -197,6 +207,31 @@ export const newsletterFeed = defineTool({
 			}
 			rows.sort((a, b) => a.inDays - b.inDays);
 			out.birthdays = rows.map((r) => `${r.name} (${r.date})`);
+		}
+
+		if (args.includeAdvancement ?? true) {
+			const cutoff = new Date(Date.now() - (args.sinceDays ?? 7) * 864e5).toISOString().slice(0, 10);
+			const failed: string[] = [];
+			const rows = await pool(roster.scouts, 4, async (s: Any) => {
+				const r = await retry(() => api.advancement.listYouthRanks({ userId: s.sbUserId }));
+				if (r.error) {
+					failed.push(nameOf(s));
+					return [];
+				}
+				return scoutsBsaRanks(r.data)
+					.map((rk: Any) => ({ scout: nameOf(s), rank: String(rk.name), earned: earnedDate(rk) }))
+					.filter((x: Any) => x.earned && x.earned >= cutoff);
+			});
+			const earned = rows.flat().sort((a: Any, b: Any) => a.earned.localeCompare(b.earned) || a.scout.localeCompare(b.scout));
+			out.ranksEarned = earned;
+			// Ready-made intro line: "Ash Underwood and Daniel Dawson both earned Second Class!"
+			const byRank = new Map<string, string[]>();
+			for (const e of earned) byRank.set(e.rank, [...(byRank.get(e.rank) ?? []), e.scout]);
+			out.introLines = [...byRank.entries()].map(([rank, names]) => {
+				const who = names.length > 2 ? `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}` : names.join(" and ");
+				return `${who} ${names.length > 1 ? "both " : ""}earned ${rank}!`.replace("both earned", names.length === 2 ? "both earned" : "earned");
+			});
+			if (failed.length) out.advancementFailures = failed;
 		}
 
 		if (args.includeLeadership ?? true) {
