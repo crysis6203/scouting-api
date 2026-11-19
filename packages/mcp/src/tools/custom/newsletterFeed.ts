@@ -2,6 +2,7 @@ import { z } from "zod";
 import { defineTool } from "../define.ts";
 import {
 	type Any,
+	clean,
 	day,
 	daysBetween,
 	nameOf,
@@ -12,6 +13,16 @@ import {
 } from "./troopCommon.ts";
 
 const TZ = "America/Chicago";
+
+// Event Description (parent-facing HTML) as one short plain-text line for a card
+function shortText(html: unknown): string[] {
+	const t = clean(html);
+	if (!t) return [];
+	if (t.length <= 160) return [t];
+	const cut = t.slice(0, 160);
+	const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+	return [end > 40 ? cut.slice(0, end + 1) : `${cut.replace(/\s+\S*$/, "")}...`];
+}
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 // Scoutbook event times are UTC; the troop reads them in Central time
@@ -55,7 +66,7 @@ export const newsletterFeed = defineTool({
 	name: "newsletterFeed",
 	title: "Weekly newsletter (ITCs) data",
 	description:
-		"Short data feed for the weekly ITCs troop newsletter: upcoming troop events (times in Central), RSVP lists for events that have RSVPs turned on (scouts who said yes, alphabetical, no adults), and current scout leadership positions. Optional: a small birthdays line (placed just before leadership) with includeBirthdays. Events within `weeks` weeks (default 4). Weekly troop meetings are flagged isMeeting so they can be left out. Events whose Scoutbook Notes start with 'Newsletter: <title>' come back with newsletter/newsletterDetails (extra lines in the notes are card details); 'Newsletter skip' sets newsletterSkip.",
+		"Short data feed for the weekly ITCs troop newsletter: upcoming troop events (times in Central), RSVP lists for events that have RSVPs turned on (scouts who said yes, alphabetical, no adults), and current scout leadership positions. Optional: a small birthdays line (placed just before leadership) with includeBirthdays. Events within `weeks` weeks (default 4). Weekly troop meetings are flagged isMeeting so they can be left out. Events whose Scoutbook Notes start with 'Newsletter: <title>' come back with newsletter/newsletterDetails (card details come from extra lines in the Notes, else from the event Description); 'Newsletter skip' sets newsletterSkip.",
 	readOnly: true,
 	requiresAuth: true,
 	input: z.object({
@@ -118,7 +129,7 @@ export const newsletterFeed = defineTool({
 				tag >= 0 && !skip
 					? {
 							newsletter: (lines[tag] as string).replace(/^newsletter\s*:?\s*/i, "").trim() || String(e.name),
-							newsletterDetails: lines.slice(tag + 1),
+							newsletterDetails: lines.length > tag + 1 ? lines.slice(tag + 1) : shortText(e.description),
 						}
 					: {};
 			return {
@@ -190,7 +201,6 @@ export const newsletterFeed = defineTool({
 
 		if (args.includeLeadership ?? true) {
 			const failures: string[] = [];
-			const unapproved: string[] = [];
 			const rows = await pool(roster.scouts, 4, async (s: Any) => {
 				const h = await retry(() =>
 					api.advancement.listYouthLeadershipPositionHistory({ userId: s.sbUserId }),
@@ -202,7 +212,6 @@ export const newsletterFeed = defineTool({
 				return (h.data as Any[])
 					.filter((p) => !p.endDate && !day(p.startDate)?.startsWith("9999"))
 					.map((p) => {
-						if (p.approved === false) unapproved.push(`${nameOf(s)} (${p.position})`);
 						const patrol = /patrol leader/i.test(p.position) && p.patrol ? ` (${p.patrol})` : "";
 						return { position: String(p.position), name: `${nameOf(s)}${patrol}` };
 					});
@@ -215,10 +224,9 @@ export const newsletterFeed = defineTool({
 				.sort((a, b) => orderOf(a[0]) - orderOf(b[0]) || a[0].localeCompare(b[0]))
 				.map(([position, names]) => [position, [...new Set(names)].sort((a, b) => a.localeCompare(b))]);
 			const doubled = (out.leadership as Any[])
-				.filter(([p, n]) => /^(senior patrol leader|quartermaster|scribe|historian|troop guide)$/i.test(p) && p !== "Scribe" && n.length > 1)
+				.filter(([p, n]) => /^senior patrol leader$/i.test(p) && n.length > 1)
 				.map(([p, n]) => `${p}: ${n.join(" and ")}`);
 			if (doubled.length) out.leadershipCheck = `More than one holder; an old term may need an end date in Scoutbook: ${doubled.join("; ")}`;
-			if (unapproved.length) out.leadershipNotApproved = unapproved;
 			if (failures.length) out.leadershipFailures = failures;
 		}
 
