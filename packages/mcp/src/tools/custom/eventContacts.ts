@@ -47,7 +47,7 @@ export const eventContacts = defineTool({
 	name: "eventContacts",
 	title: "Event attendees with their parents' contact details",
 	description:
-		"Finds troop calendar events by name and lists who is attending (by RSVP) with contact details. For each scout it gives his parents' names, emails and phones; for each adult who is a parent of a troop scout it gives their own email. Also returns one de-duplicated email list. Use this for questions like 'email everyone coming to the December Lock-In and their parents'. Defaults to events in the next 180 days.",
+		"Finds troop calendar events by name and lists who is attending (by RSVP) with contact details. For each scout it gives his parents' names, emails and phones; for each adult who is a parent of a troop scout it gives their own email. Also returns one de-duplicated email list. With the default yes list it adds maybesToFollowUp, the people who answered maybe, with contact details, kept out of the email list. Use this for questions like 'email everyone coming to the December Lock-In and their parents'. Defaults to events in the next 180 days.",
 	readOnly: true,
 	requiresAuth: true,
 	input: z.object({
@@ -225,6 +225,24 @@ export const eventContacts = defineTool({
 				}
 				return { ...base, parents };
 			});
+			// With the default yes list, also flag the maybes so they get a follow-up.
+			// They stay out of the email list above, which is for confirmed people.
+			const followUp =
+				who === "yes"
+					? ((e.invitedUsers ?? []) as Any[])
+							.filter((u) => (u.rsvpCode ?? "") === "M")
+							.map((u) => {
+								const name = nameOf(u);
+								if (u.isAdult) {
+									const rec = parentRecord.get(u.userId);
+									const c = rec?.email
+										? { email: rec.email as string, phone: rec.mobilePhone as string | null }
+										: contactFor(u.firstName, u.lastName, u.nickName);
+									return { name, role: "adult", email: c.email, mobilePhone: c.phone };
+								}
+								return { name, role: "scout", parents: parentsOf.get(u.userId) ?? [] };
+							})
+					: undefined;
 			// Every registered adult leader, with their response to this event
 			const invited: Any[] = e.invitedUsers ?? [];
 			const status = (code: string, attended: boolean) =>
@@ -265,6 +283,7 @@ export const eventContacts = defineTool({
 				start: String(e.startDate).slice(0, 16).replace("T", " "),
 				count: attendees.length,
 				attendees,
+				maybesToFollowUp: followUp?.length ? followUp : undefined,
 				emailList: [...emails].filter((e) => !PLACEHOLDER.test(e)).sort(),
 				placeholderEmails: [...emails].filter((e) => PLACEHOLDER.test(e)).sort(),
 				missing,
