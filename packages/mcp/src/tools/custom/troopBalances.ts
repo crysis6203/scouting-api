@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineTool } from "../define.ts";
-import { type Any, findPeople, orgGuidOf, rawGet } from "./troopCommon.ts";
+import { type Any, findPeople, nameOf, orgGuidOf, rawGet, troopYouth } from "./troopCommon.ts";
 
 const money = (n: number) => Math.round(n * 100) / 100;
 
@@ -8,7 +8,7 @@ export const troopBalances = defineTool({
 	name: "troopBalances",
 	title: "Scout account balances",
 	description:
-		"Current Scoutbook account balance for each scout, as on a scout's profile page. A negative balance means the scout owes money to the troop; a positive one is credit. Give `name` for one scout, or view=owing for everyone with a negative balance (largest first), view=credit for positive balances, view=all for everyone, which also totals them. Current balances only, not payment history.",
+		"Current Scoutbook account balance for each scout, as on a scout's profile page. A negative balance means the scout owes money to the troop; a positive one is credit. Give `name` for one scout, or view=owing for everyone with a negative balance (largest first), view=credit for positive balances, view=all for everyone, which also totals them. Current balances only, not payment history. Only scouts on the current troop roster are counted.",
 	readOnly: true,
 	requiresAuth: true,
 	input: z.object({
@@ -20,6 +20,11 @@ export const troopBalances = defineTool({
 		const api = scouting.api as Any;
 		const guid = orgGuidOf(args.organizationGuid);
 		const today = new Date().toISOString().slice(0, 10);
+		// The endpoint lists every account in the unit, including former members and
+		// adults, so keep only scouts on the current roster
+		const roster = await troopYouth(api, guid);
+		if ("error" in roster) return roster.error;
+		const current = new Map<number, Any>(roster.scouts.map((s: Any) => [s.sbUserId, s]));
 		// The endpoint insists on a date range; a wide one returns the running balance
 		const res = await rawGet(api, `/advancements/v2/organization/${guid}/balanceDetails`, {
 			fromDate: "2000-01-01",
@@ -28,15 +33,17 @@ export const troopBalances = defineTool({
 		if (res.error !== undefined) {
 			return { data: { status: res.response?.status, error: res.error } };
 		}
-		const rows = (res.data as Any[]).map((m) => ({
-			firstName: m.firstName,
-			middleName: m.middleName,
-			nickName: m.nickName,
-			lastName: m.lastName,
-			personFullName: `${m.firstName} ${m.lastName}`,
-			scout: `${m.nickName || m.firstName} ${m.lastName}`,
-			balance: money(m.balanceDetails?.balance ?? 0),
-		}));
+		const rows = (res.data as Any[])
+			.filter((m) => current.has(m.userId))
+			.map((m) => ({
+				firstName: m.firstName,
+				middleName: m.middleName,
+				nickName: m.nickName,
+				lastName: m.lastName,
+				personFullName: `${m.firstName} ${m.lastName}`,
+				scout: nameOf(current.get(m.userId)),
+				balance: money(m.balanceDetails?.balance ?? 0),
+			}));
 		const show = (x: Any) => ({ scout: x.scout, balance: x.balance });
 		if (args.name) {
 			const hit = findPeople(rows, args.name);

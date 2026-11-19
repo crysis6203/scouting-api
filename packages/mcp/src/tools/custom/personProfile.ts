@@ -35,7 +35,7 @@ export const personProfileTool = defineTool({
 	name: "personProfile",
 	title: "A person's own profile: email, swim classification, health forms",
 	description:
-		"Reads each scout's own Scoutbook profile. view=profile: one person's own emails and phones, Scoutbook swim classification, and health form dates (give `name`). view=health: every scout's annual health record Parts A/B and C dates, flagging ones over a year old or missing. view=swim: every scout's Scoutbook swim classification and test date. view=emails: every scout's own email address. Use for 'what is Keaton's email?', 'who has an expired health form?', 'who is a beginner swimmer?'. Health form dates are what a leader typed into Scoutbook, so treat them as a record, not proof of a signed form.",
+		"Reads each scout's own Scoutbook profile. view=profile: one person's own emails and phones, Scoutbook swim classification, and health form dates (give `name`). view=health: scouts whose annual health record Parts A/B are missing or over a year old, with Part C listed separately (only needed for events over 72 hours). view=swim: every scout's Scoutbook swim classification and test date. view=emails: every scout's own email address. Use for 'what is Keaton's email?', 'who has an expired health form?', 'who is a beginner swimmer?'. Health form dates are what a leader typed into Scoutbook, so treat them as a record, not proof of a signed form.",
 	readOnly: true,
 	requiresAuth: true,
 	input: z.object({
@@ -82,7 +82,7 @@ export const personProfileTool = defineTool({
 		const scouts = args.name ? findPeople(roster.scouts, args.name) : roster.scouts;
 		if (!scouts.length) return { data: { error: `No scout matches "${args.name}".` } };
 		const failures: string[] = [];
-		const rows = await pool(scouts, 4, async (s: Any) => {
+		const rows = await pool(scouts, 3, async (s: Any) => {
 			const r = await personProfile(api, s.personGuid);
 			if (r.error !== undefined) {
 				failures.push(nameOf(s));
@@ -103,22 +103,28 @@ export const personProfileTool = defineTool({
 			return { scout: nameOf(s), ...health(d.sbExtendedProfile, today) };
 		});
 		const list = rows.filter(Boolean) as Any[];
+		const fail = failures.length ? failures : undefined;
+
 		if (view === "health") {
-			const bad = list.filter((x) => !/within a year/.test(x.partsAB) || !/within a year/.test(x.partC));
+			const ok = (t: string) => /within a year/.test(t);
+			const ab = list.filter((x) => !ok(x.partsAB)).map((x) => ({ scout: x.scout, partsAB: x.partsAB }));
+			// Part C is only needed for events longer than 72 hours, so it is listed apart
+			const c = list.filter((x) => ok(x.partsAB) && !ok(x.partC)).map((x) => ({ scout: x.scout, partC: x.partC }));
 			return {
 				data: {
-					needAttention: bad,
-					okCount: list.length - bad.length,
-					failures: failures.length ? failures : undefined,
-					note: "Needs attention means Part A/B or Part C has no date or is dated over a year ago. Dates are as entered in Scoutbook.",
+					partsABNeedAttention: ab,
+					partCOnlyNeedsAttention: c,
+					partsABCurrentCount: list.length - ab.length,
+					failures: fail,
+					note: "Parts A and B are the annual physical, needed for every outing: listed when missing or dated over a year ago. Part C is only required for events over 72 hours (summer camp), so it is listed separately for scouts whose A/B is current. Dates are as entered in Scoutbook.",
 				},
 			};
 		}
 		if (view === "swim") {
 			const groups: Record<string, string[]> = {};
 			for (const x of list) (groups[x.classification] ??= []).push(x.scout + (x.date ? ` (${x.date})` : ""));
-			return { data: { byClassification: groups, failures: failures.length ? failures : undefined } };
+			return { data: { byClassification: groups, failures: fail } };
 		}
-		return { data: { scouts: list, failures: failures.length ? failures : undefined } };
+		return { data: { scouts: list, failures: fail } };
 	},
 });
