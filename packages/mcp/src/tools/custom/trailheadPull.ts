@@ -36,12 +36,6 @@ const renewal = (s: unknown) =>
 // Drops the "Resources" video links Scoutbook puts inside requirement text
 const plain = (s: unknown) => clean(String(s ?? "").replace(/<details>[\s\S]*?<\/details>/gi, " "));
 
-// Scoutbook's sortOrder like "1.10" -> a number that sorts 1.2 before 1.10
-const order = (q: Any) => {
-	const [a = "0", b = "0"] = String(q.sortOrder ?? "").split(".");
-	return Number(a) * 1000 + Number(b);
-};
-
 const mbStatus = (b: Any): "awarded" | "completed" | "in_progress" =>
 	b.awardedDate || b.status === "Awarded"
 		? "awarded"
@@ -49,16 +43,79 @@ const mbStatus = (b: Any): "awarded" | "completed" | "in_progress" =>
 			? "completed"
 			: "in_progress";
 
-const reqCode = (r: Any) =>
-	(clean(r.requirementNumber) || clean(r.listNumber)).replace(/[().\s]/g, "").slice(0, 10);
+type Built = {
+	rows: Any[];
+	codeById: Map<string, string>;
+	leafIds: Set<string>;
+};
+
+// Turns a flat Scoutbook requirement list (rank or merit badge, for a version or
+// for one youth) into Trailhead's shape: codes like "6" and "6a", headers marked
+// not checkable, each sub-item pointing at its header, in natural code order.
+function buildRequirements(reqs: Any[]): Built {
+	const byId = new Map(reqs.map((q) => [String(q.id), q]));
+	const parentIds = new Set(
+		reqs.map((q) => String(q.parentRequirementId ?? "")).filter(Boolean),
+	);
+	const codeOf = (q: Any, depth = 0): string => {
+		const rn = clean(q.requirementNumber);
+		if (rn) return rn.slice(0, 15);
+		const ln = clean(q.listNumber).replace(/[().\s]/g, "");
+		if (!ln) return "";
+		const p = depth < 4 ? byId.get(String(q.parentRequirementId ?? "")) : undefined;
+		return (p ? codeOf(p, depth + 1) + ln : ln).slice(0, 15);
+	};
+	const entries = reqs
+		.map((q) => ({ q, code: codeOf(q), text: plain(q.name) }))
+		.filter((e) => e.code && e.text)
+		.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+	const seen = new Set<string>();
+	const rows: Any[] = [];
+	const codeById = new Map<string, string>();
+	const leafIds = new Set<string>();
+	for (const e of entries) {
+		if (seen.has(e.code)) continue;
+		seen.add(e.code);
+		const id = String(e.q.id);
+		const parent = byId.get(String(e.q.parentRequirementId ?? ""));
+		const parentCode = parent ? codeOf(parent) : "";
+		const checkable = !parentIds.has(id);
+		codeById.set(id, e.code);
+		if (checkable) leafIds.add(id);
+		rows.push({
+			code: e.code,
+			text: e.text,
+			checkable,
+			parent_code: parentCode || null,
+			sort_order: rows.length + 1,
+		});
+	}
+	return { rows, codeById, leafIds };
+}
+
+const chunks = <T>(items: T[], n: number): T[][] => {
+	const out: T[][] = [];
+	for (let i = 0; i < items.length; i += n) out.push(items.slice(i, i + n));
+	return out;
+};
+
+type MbVersion = {
+	id: number;
+	versionId: number;
+	name: string;
+	version: number;
+	eagle: boolean;
+	needsReqs: boolean;
+	built?: Built;
+};
 
 export const trailheadPull = defineTool({
 	name: "trailheadPull",
-	title: "Build or send the Trailhead roster and rank sync",
+	title: "Build or send the Trailhead roster, rank and merit badge sync",
 	description: [
-		"Collects the troop roster and Scouts BSA rank data from the Scouting API in the shape Trailhead's sync.php expects: scouts (member ID, name, age, current position, last rank approved, renewal status, expiration), rank requirement lists for every rank version a scout is working on, and each scout's rank progress (in_progress, completed = approved but not yet awarded, awarded).",
+		"Collects the troop roster, Scouts BSA rank data and merit badge data from the Scouting API in the shape Trailhead's sync.php expects: scouts (member ID, name, age, current position, last rank approved, renewal status, expiration), requirement lists (with grouped sub-requirements like 6a/6b) for every rank and merit badge version a scout is working on, each scout's progress, and which individual requirements each scout has already completed for the ranks and badges in progress.",
 		"Read-only against Scoutbook. By default it only builds the payload and returns a summary (dry run). Set post=true to send it to Trailhead using the TRAILHEAD_URL and TRAILHEAD_API_KEY environment variables; it also logs a run in Trailhead unless logRun=false.",
-		"Does not touch Trailhead's sign-off queue. Includes merit badges (requirement lists and each scout's progress) unless meritBadges=false. Takes about 30 seconds.",
+		"Options: meritBadges=false leaves badges out; requirementStatus=false skips the per-requirement completion data (faster). Does not touch Trailhead's sign-off queue. Takes about 45 seconds with everything included.",
 	].join(" "),
 	readOnly: true,
 	requiresAuth: true,
@@ -71,6 +128,12 @@ export const trailheadPull = defineTool({
 			.boolean()
 			.optional()
 			.describe("Include merit badges (requirements and each scout's progress). Defaults to true."),
+		requirementStatus: z
+			.boolean()
+			.optional()
+			.describe(
+				"Include which individual requirements each scout has completed, for ranks and badges in progress. Defaults to true.",
+			),
 		logRun: z
 			.boolean()
 			.optional()
@@ -86,24 +149,26 @@ export const trailheadPull = defineTool({
 	call: async (scouting, args) => {
 		const t0 = Date.now();
 		const api = scouting.api as Any;
+		const orgGuid = orgGuidOf(args.organizationGuid);
 		const today = new Date();
 		const failures: string[] = [];
+		const softFailures: string[] = [];
+		const withBadges = args.meritBadges !== false;
+		const withStatus = args.requirementStatus !== false;
 
-		const roster = await troopYouth(api, orgGuidOf(args.organizationGuid), true);
+		const roster = await troopYouth(api, orgGuid, true);
 		if ("error" in roster) return roster.error;
 
 		const scoutsOut: Any[] = [];
 		const progressOut: Any[] = [];
-		const withBadges = args.meritBadges !== false;
 		const mbProgress: Any[] = [];
-		const mbVersions = new Map<
-			string,
-			{ id: number; versionId: number; name: string; version: number; eagle: boolean; needsReqs: boolean }
-		>();
+		const mbVersions = new Map<string, MbVersion>();
 		const versions = new Map<
 			string,
 			{ rankId: number; versionId: number; name: string; version: number; needsReqs: boolean }
 		>();
+		const rankWork: { scout: string; memberId: number; userId: number; rankId: number; name: string; version: number }[] = [];
+		const mbWork = new Map<number, Map<number, number>>(); // badge id -> member id -> user id
 
 		await pool(roster.scouts, 4, async (s: Any) => {
 			const [r, h, mb] = await Promise.all([
@@ -162,7 +227,12 @@ export const trailheadPull = defineTool({
 					eagle: Boolean(b.isEagleRequired),
 					needsReqs: false,
 				};
-				if (status === "in_progress") entry.needsReqs = true;
+				if (status === "in_progress") {
+					entry.needsReqs = true;
+					const members = mbWork.get(Number(b.id)) ?? new Map<number, number>();
+					members.set(memberId, s.sbUserId);
+					mbWork.set(Number(b.id), members);
+				}
 				mbVersions.set(key, entry);
 			}
 
@@ -188,7 +258,17 @@ export const trailheadPull = defineTool({
 					version,
 					needsReqs: false,
 				};
-				if (status === "in_progress") entry.needsReqs = true;
+				if (status === "in_progress") {
+					entry.needsReqs = true;
+					rankWork.push({
+						scout: nameOf(s),
+						memberId,
+						userId: s.sbUserId,
+						rankId: rk.id,
+						name: rk.name,
+						version,
+					});
+				}
 				versions.set(key, entry);
 			}
 		});
@@ -203,76 +283,105 @@ export const trailheadPull = defineTool({
 				failures.push(`${v.name} ${v.version}: requirement lookup failed`);
 				return { name: v.name, version_year: v.version, requirements: [] as Any[] };
 			}
-			const reqs: Any[] = res.data.requirements ?? [];
-			const parents = new Set(reqs.map((q) => String(q.parentRequirementId ?? "")).filter(Boolean));
-			const leaves = reqs
-				.filter((q) => !parents.has(String(q.id)))
-				.sort((x, y) => order(x) - order(y));
-			const seen = new Set<string>();
-			const out: Any[] = [];
-			leaves.forEach((q, i) => {
-				const code = reqCode(q);
-				if (!code || seen.has(code)) return;
-				seen.add(code);
-				out.push({ code, text: clean(q.name) || clean(q.short), sort_order: i + 1 });
-			});
-			return { name: v.name, version_year: v.version, requirements: out };
+			return {
+				name: v.name,
+				version_year: v.version,
+				requirements: buildRequirements(res.data.requirements ?? []).rows,
+			};
 		});
 
-		// Merit badge requirement lists for each badge version someone is working on
-		const mbReqs = await pool([...mbVersions.values()], 4, async (v) => {
-			if (!v.needsReqs) return { v, requirements: [] as Any[] };
+		// Requirement lists for each merit badge version someone is working on
+		await pool([...mbVersions.values()], 4, async (v) => {
+			if (!v.needsReqs) return;
 			const res = await retry(() =>
 				api.advancement.getMeritBadgeRequirements({ meritBadgeId: v.id, versionId: v.versionId }),
 			);
 			if (res.error) {
 				failures.push(`${v.name} ${v.version}: requirement lookup failed`);
-				return { v, requirements: [] as Any[] };
+				return;
 			}
-			const reqs: Any[] = res.data.requirements ?? [];
-			const byId = new Map(reqs.map((q) => [String(q.id), q]));
-			const parentIds = new Set(reqs.map((q) => String(q.parentRequirementId ?? "")).filter(Boolean));
-			const codeOf = (q: Any, depth = 0): string => {
-				const rn = clean(q.requirementNumber);
-				if (rn) return rn.slice(0, 15);
-				const ln = clean(q.listNumber).replace(/[().\s]/g, "");
-				if (!ln) return "";
-				const p = depth < 4 ? byId.get(String(q.parentRequirementId ?? "")) : undefined;
-				return (p ? codeOf(p, depth + 1) + ln : ln).slice(0, 15);
-			};
-			const seen = new Set<string>();
-			const out: Any[] = [];
-			[...reqs]
-				.sort((x, y) => order(x) - order(y))
-				.forEach((q) => {
-					const code = codeOf(q);
-					const text = plain(q.name);
-					if (!code || !text || seen.has(code)) return;
-					seen.add(code);
-					const parent = byId.get(String(q.parentRequirementId ?? ""));
-					const parentCode = parent ? codeOf(parent) : "";
-					out.push({
-						code,
-						text,
-						checkable: !parentIds.has(String(q.id)),
-						parent_code: parentCode || null,
-						sort_order: out.length + 1,
-					});
-				});
-			return { v, requirements: out };
+			v.built = buildRequirements(res.data.requirements ?? []);
 		});
 		const badgeMap = new Map<string, Any>();
-		for (const { v, requirements } of mbReqs) {
+		for (const v of mbVersions.values()) {
 			const badge = badgeMap.get(v.name) ?? { name: v.name, eagle_required: v.eagle, versions: [] };
 			badge.versions.push({
 				version_year: v.version,
 				is_current: v.needsReqs,
 				expiration_date: null,
-				requirements,
+				requirements: v.built?.rows ?? [],
 			});
 			badgeMap.set(v.name, badge);
 		}
 		const badgesOut = [...badgeMap.values()];
+
+		// Which individual requirements each scout has completed
+		const rankStatus: Any[] = [];
+		const badgeStatus: Any[] = [];
+		if (withStatus) {
+			await pool(rankWork, 6, async (w) => {
+				const res = await retry(() =>
+					api.advancement.getYouthRankRequirements({ userId: w.userId, rankId: w.rankId }),
+				);
+				if (res.error) {
+					softFailures.push(`${w.scout}: ${w.name} requirement status lookup failed`);
+					return;
+				}
+				const reqs: Any[] = res.data.requirements ?? [];
+				const built = buildRequirements(reqs);
+				for (const q of reqs) {
+					const id = String(q.id);
+					const code = built.codeById.get(id);
+					if (!code || !built.leafIds.has(id)) continue;
+					const done = Boolean(q.completed);
+					rankStatus.push({
+						scout_id: w.memberId,
+						rank_name: w.name,
+						version_year: w.version,
+						requirement_code: code,
+						completed: done,
+						completion_date: done
+							? (day(q.dateCompleted) ?? day(q.leaderApprovedDate) ?? day(q.markedCompletedDate))
+							: null,
+					});
+				}
+			});
+
+			await pool([...mbWork.entries()], 4, async ([badgeId, members]) => {
+				const res = await retry(() =>
+					api.advancement.listMemberMeritBadgeRequirements({
+						organizationGuid: orgGuid,
+						meritBadgeId: badgeId,
+						memberId: [...members.keys()],
+					}),
+				);
+				if (res.error) {
+					softFailures.push(`merit badge ${badgeId}: requirement status lookup failed`);
+					return;
+				}
+				for (const item of res.data as Any[]) {
+					const v = mbVersions.get(`${badgeId}:${item.versionId}`);
+					if (!v?.built) continue;
+					for (const r of item.requirements ?? []) {
+						const id = String(r.id);
+						const code = v.built.codeById.get(id);
+						if (!code || !v.built.leafIds.has(id)) continue;
+						const done =
+							r.status === "Leader Approved" || Boolean(r.dateCompleted) || Boolean(r.leaderApprovedDate);
+						badgeStatus.push({
+							scout_id: item.memberId,
+							badge_name: v.name,
+							version_year: v.version,
+							requirement_code: code,
+							completed: done,
+							completion_date: done
+								? (day(r.dateCompleted) ?? day(r.leaderApprovedDate) ?? day(r.markedCompletedDate))
+								: null,
+						});
+					}
+				}
+			});
+		}
 
 		scoutsOut.sort((a, b) => a.name.localeCompare(b.name));
 		const payload: Any = { scouts: scoutsOut, ranks: ranksOut, rank_progress: progressOut };
@@ -280,6 +389,10 @@ export const trailheadPull = defineTool({
 			payload.merit_badges = badgesOut;
 			payload.merit_badge_progress = mbProgress;
 		}
+		const statusPayloads: Any[] = [
+			...chunks(rankStatus, 1500).map((c) => ({ rank_requirement_status: c })),
+			...chunks(badgeStatus, 1500).map((c) => ({ merit_badge_requirement_status: c })),
+		];
 		const summary: Any = {
 			scouts: scoutsOut.length,
 			rankVersions: ranksOut.length,
@@ -298,7 +411,16 @@ export const trailheadPull = defineTool({
 						inProgress: mbProgress.filter((p) => p.status === "in_progress").length,
 					}
 				: undefined,
+			requirementStatus: withStatus
+				? {
+						rankRows: rankStatus.length,
+						rankCompleted: rankStatus.filter((x) => x.completed).length,
+						badgeRows: badgeStatus.length,
+						badgeCompleted: badgeStatus.filter((x) => x.completed).length,
+					}
+				: undefined,
 			failures: failures.length ? failures : undefined,
+			statusLookupFailures: softFailures.length ? softFailures : undefined,
 		};
 
 		if (!args.post) {
@@ -308,10 +430,11 @@ export const trailheadPull = defineTool({
 					summary,
 					sample: {
 						scout: scoutsOut[0],
-						rank: ranksOut.find((x) => x.requirements.length),
-						badge: badgesOut.find((b: Any) => b.versions.some((x: Any) => x.requirements.length)),
+						rank: ranksOut.find((x) => x.requirements.some((q: Any) => q.parent_code)),
+						rankStatus: rankStatus.slice(0, 4),
+						badgeStatus: badgeStatus.slice(0, 4),
 					},
-					payload: args.includePayload ? payload : undefined,
+					payload: args.includePayload ? { ...payload, rankStatus, badgeStatus } : undefined,
 					elapsedSeconds: Math.round((Date.now() - t0) / 100) / 10,
 				},
 			};
@@ -352,22 +475,39 @@ export const trailheadPull = defineTool({
 			const logRun = args.logRun !== false;
 			const run = logRun ? await send("sync-runs.php", { run_type: "manual_pull" }) : undefined;
 			const runId: number | undefined = run?.json?.id;
-			const sync = await send("sync.php", payload);
+			let updated = 0;
+			let ok = true;
+			let failed: Any;
+			let lastStatus = 200;
+			// The main data goes first, then the requirement status in chunks, so each
+			// request stays small and the requirements it refers to already exist
+			for (const body of [payload, ...statusPayloads]) {
+				const r = await send("sync.php", body);
+				lastStatus = r.status;
+				if (!r.ok) {
+					ok = false;
+					failed = r.json;
+					break;
+				}
+				updated += Number(r.json?.updated ?? 0);
+			}
 			if (runId) {
 				await send("sync-runs.php", {
 					id: runId,
-					pull_updated_count: sync.json?.updated ?? 0,
+					pull_updated_count: updated,
 					push_confirmed_count: 0,
 					push_flagged_count: 0,
-					status: sync.ok ? "success" : "failed",
-					fail_reason: sync.ok ? null : JSON.stringify(sync.json).slice(0, 500),
+					status: ok ? "success" : "failed",
+					fail_reason: ok ? null : JSON.stringify(failed).slice(0, 500),
 				});
 			}
 			return {
 				data: {
-					sent: sync.ok,
-					httpStatus: sync.status,
-					trailheadResponse: sync.json,
+					sent: ok,
+					httpStatus: lastStatus,
+					updated,
+					trailheadError: ok ? undefined : failed,
+					requests: 1 + statusPayloads.length,
 					runId,
 					summary,
 					elapsedSeconds: Math.round((Date.now() - t0) / 100) / 10,
