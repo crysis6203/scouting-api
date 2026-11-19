@@ -1963,6 +1963,287 @@ paths:
                 message: Not Found
                 errorDesc: Sea Scout Elective not found for the given ssElectiveId - SSElectives
 
+  /advancements/v2/youth/{userId}/adventures:
+    get:
+      tags: [Advancement]
+      operationId: listYouthAdventures
+      x-untested: Results depend on the signed-in account's access to the youth's unit
+      summary: List a youth's adventure progress
+      description: >-
+        Returns a youth's progress on adventures, one item per adventure,
+        with its completion and approval fields. Takes the youth's Scoutbook
+        user ID, the `sbUserId` of the organization member listings.
+      security:
+        - bearer: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: The youth's progress on each adventure
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/YouthAdventureProgress"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /advancements/v2/youth/{userId}/awards:
+    get:
+      tags: [Advancement]
+      operationId: listYouthAwards
+      x-untested: Results depend on the signed-in account's access to the youth's unit
+      summary: List a youth's award progress
+      description: >-
+        Returns a youth's progress on awards, one item per award, with its
+        completion and approval fields. Takes the youth's Scoutbook user ID,
+        the `sbUserId` of the organization member listings.
+      security:
+        - bearer: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: The youth's progress on each award
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/YouthAwardProgress"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /advancements/v2/youth/{userId}/meritBadges:
+    get:
+      tags: [Advancement]
+      operationId: listYouthMeritBadges
+      x-untested: Results depend on the signed-in account's access to the youth's unit
+      summary: List a youth's merit badge progress
+      description: >-
+        Returns a youth's progress on merit badges, one item per badge, with
+        its start, completion, counselor, and approval fields. Takes the
+        youth's Scoutbook user ID, the `sbUserId` of the organization member
+        listings.
+      security:
+        - bearer: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: The youth's progress on each merit badge
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/YouthMeritBadgeProgress"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /advancements/events:
+    post:
+      tags: [Advancement]
+      operationId: listEvents
+      x-untested: Captured from the Scoutbook Plus calendar; GET returns 405
+      summary: List calendar events for a unit
+      description: >-
+        Returns a unit's calendar events that start between two dates, each
+        with its invited users and their RSVP and attendance. Takes the
+        unit's numeric `unitId` (the `unitId` of a calendar from the user
+        calendar list), not its GUID. `rsvpCode` is `Y`, `N`, `M` (maybe), or
+        empty for no response. GET returns 405. Read-only despite using POST.
+      security:
+        - bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [fromDate, toDate, unitId]
+              properties:
+                fromDate:
+                  type: string
+                  description: First day to include, as `YYYY-MM-DD`
+                toDate:
+                  type: string
+                  description: Last day to include, as `YYYY-MM-DD`
+                unitId:
+                  type: integer
+                  description: The unit's numeric ID, from the user calendar list
+                showDLEvents:
+                  type: boolean
+                  description: Whether to include den leader events. The web app sends `true`.
+      responses:
+        "200":
+          description: The unit's events in the date range
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CalendarEventListItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /advancements/events/{eventId}:
+    get:
+      tags: [Advancement]
+      operationId: getEvent
+      x-untested: Captured from the Scoutbook Plus event page
+      summary: Get one calendar event
+      description: >-
+        Returns one event with its details and the `users` invited to it,
+        each with `rsvpCode` (`Y`, `N`, `M` for maybe, or empty) and
+        `attended`. Events that belong to no unit, such as some patrol outings
+        (`units` is empty in the event list), return 400 "organizationGuid is
+        required for rolecheck". The event list still has their invitees and RSVPs.
+      security:
+        - bearer: []
+      parameters:
+        - $ref: "#/components/parameters/EventId"
+      responses:
+        "200":
+          description: The event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarEventDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /advancements/v2/events/{eventId}/guests:
+    get:
+      tags: [Advancement]
+      operationId: listEventGuests
+      x-untested: Captured from the Scoutbook Plus event page; empty in the captures
+      summary: List an event's external guests
+      description: Returns the external guests added to an event.
+      security:
+        - bearer: []
+      parameters:
+        - $ref: "#/components/parameters/EventId"
+      responses:
+        "200":
+          description: The event's external guests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UnconfirmedObject"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /advancements/v2/users/{userId}/calendars:
+    get:
+      tags: [Advancement]
+      operationId: listUserCalendars
+      x-untested: Captured from the Scoutbook Plus calendar
+      summary: List a user's calendars
+      description: >-
+        Returns the unit, den, and patrol calendars a user can see, each with
+        its numeric `unitId`. Works only for the signed-in user's own
+        Scoutbook user ID; another user's ID returns 403.
+      security:
+        - bearer: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: The user's calendars
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserCalendar"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /advancements/v2/youth/{userId}/ranks:
+    get:
+      tags: [Advancement]
+      operationId: listYouthRanks
+      x-untested: Results depend on the signed-in account's access to the youth's unit
+      summary: List a youth's rank progress
+      description: >-
+        Returns a youth's rank progress, grouped by program. Each rank has its
+        status, completion and award dates, and a `percentCompleted` value.
+        Takes the youth's Scoutbook user ID, the `sbUserId` of the
+        organization member listings. Program IDs here don't match the
+        program IDs of the rank list.
+      security:
+        - bearer: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: The youth's rank progress by program
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/YouthRanks"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /advancements/v2/youth/{userId}/ranks/{rankId}/requirements:
+    get:
+      tags: [Advancement]
+      operationId: getYouthRankRequirements
+      x-untested: Results depend on the signed-in account's access to the youth's unit
+      summary: Get a youth's progress on a rank's requirements
+      description: >-
+        Returns one rank with the youth's status on each requirement,
+        including `completed`, `started`, and the completion, entry, and
+        approval dates. Requirements are a flat list; nest them using
+        `parentRequirementId`. Takes the youth's Scoutbook user ID, the
+        `sbUserId` of the organization member listings, and a rank `id`.
+      security:
+        - bearer: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/RankId"
+      responses:
+        "200":
+          description: The rank and the youth's status on each requirement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/YouthRankRequirements"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /advancements/youth/{userId}/leadershipPositionHistory:
+    get:
+      tags: [Advancement]
+      operationId: listYouthLeadershipPositionHistory
+      x-untested: Results depend on the signed-in account's access to the youth's unit
+      summary: List a youth's leadership position history
+      description: >-
+        Returns the leadership positions a youth has held, with start and end
+        dates, patrol, and unit. A position still held has a null `endDate`.
+        Takes the youth's Scoutbook user ID, the `sbUserId` of the
+        organization member listings.
+      security:
+        - bearer: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: The youth's leadership positions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/YouthLeadershipPositionHistoryEntry"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /commissioners/v2/{contactGuid}/unitContactDetails:
     get:
       tags: [Commissioners]
@@ -10140,9 +10421,9 @@ components:
         lastName:
           type: string
         nickName:
-          type: "null"
+          type: [string, "null"]
         nameSuffix:
-          type: "null"
+          type: [string, "null"]
         personFullName:
           type: string
           description: First and last names joined by a space
@@ -10167,7 +10448,7 @@ components:
           description: A five-digit ZIP code, sometimes padded with trailing spaces
           examples: ["06488", "06488     "]
         email:
-          type: string
+          type: [string, "null"]
           format: email
         homePhone:
           type: [string, "null"]
@@ -10176,7 +10457,7 @@ components:
           type: [string, "null"]
           examples: ["2035550123", null]
         workPhone:
-          type: "null"
+          type: [string, "null"]
         bsaVerifiedDate:
           $ref: "#/components/schemas/NullableDate"
 
@@ -11399,6 +11680,1473 @@ components:
           type: string
           examples: [Query parameter id is not repeatable]
 
+    YouthAdventureProgress:
+      type: object
+      additionalProperties: false
+      properties:
+        adventureId:
+          type: number
+        adventureName:
+          type: [string, "null"]
+        shortName:
+          type: [string, "null"]
+        expiryDt:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        versionId:
+          type: [number, "null"]
+        version:
+          type: [string, "null"]
+        rankId:
+          type: [number, "null"]
+        rankVersion:
+          type: [string, "null"]
+        rankVersionId:
+          type: [number, "null"]
+        isRequired:
+          type: [boolean, "null"]
+        sortOrder:
+          type: [number, "null"]
+        imagePath:
+          type: [string, "null"]
+        imageUrl100:
+          type: [string, "null"]
+        imageUrl200:
+          type: [string, "null"]
+        imageUrl300:
+          type: [string, "null"]
+        searchKeywords:
+          type: [string, "null"]
+        sku:
+          type: [string, "null"]
+        skuName:
+          type: [string, "null"]
+        price:
+          type: [number, "null"]
+        priceLastUpdated:
+          type: [string, "null"]
+        scoutNet:
+          type: [string, "null"]
+        bsaExternalUrlId:
+          type: [string, "null"]
+        pageUrl:
+          type: [string, "null"]
+        dateCompleted:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        markedCompletedDate:
+          type: [string, "null"]
+        markedCompletedUserId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        markedCompletedFirstName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        markedCompletedLastName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        percentCompleted:
+          type: [number, "null"]
+        leaderApprovedDate:
+          type: [string, "null"]
+        leaderApprovedUserId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        leaderApprovedFirstName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        leaderApprovedLastName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awarded:
+          type: [boolean, "null"]
+        awardedDate:
+          type: [string, "null"]
+        awardedUserId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awardedFirstName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awardedLastName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        poid:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        status:
+          type: [string, "null"]
+
+    YouthAwardProgress:
+      type: object
+      additionalProperties: false
+      properties:
+        awardId:
+          type: number
+        userAwardId:
+          type: number
+        percentCompleted:
+          type: [number, "null"]
+        markedCompletedDate:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        markedCompletedUserId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        markedCompletedFirstName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        markedCompletedLastName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        dateEarned:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        leaderApprovedUserId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        leaderApprovedDate:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        leaderApprovedFirstName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        leaderApprovedLastName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awarded:
+          type: [boolean, "null"]
+        awardedDate:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awardedUserId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awardedFirstName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awardedLastName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        referenceId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        cacheDate:
+          type: [string, "null"]
+        poid:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        name:
+          type: [string, "null"]
+        short:
+          type: [string, "null"]
+        category:
+          type: [string, "null"]
+        itemNumber:
+          type: [string, "null"]
+        rankId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        image:
+          type: [string, "null"]
+        imageSmall:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        sku:
+          type: [string, "null"]
+        skuName:
+          type: [string, "null"]
+        price:
+          type: [number, "null"]
+        priceLastUpdated:
+          type: [string, "null"]
+        adultAward:
+          type: [boolean, "null"]
+        adminNotes:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        unitTypeId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        scoutNet:
+          type: [string, "null"]
+        showOnEvents:
+          type: [boolean, "null"]
+        showOnQuickEntry:
+          type: [boolean, "null"]
+        activeDate:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        expiredDate:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        status:
+          type: [string, "null"]
+        imageUrl100:
+          type: [string, "null"]
+        imageUrl200:
+          type: [string, "null"]
+        imageUrl300:
+          type: [string, "null"]
+        imageUrl400:
+          type: [string, "null"]
+        rank:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awardVersionId:
+          type: [number, "null"]
+        version:
+          type: [string, "null"]
+        versionEffectiveDt:
+          type: [string, "null"]
+        versionExpiryDt:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        unitType:
+          type: [string, "null"]
+        program:
+          type: [string, "null"]
+
+    YouthLeadershipPositionHistoryEntry:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: number
+        positionId:
+          type: number
+        position:
+          type: [string, "null"]
+        positionImageUrl200:
+          type: [string, "null"]
+        startDate:
+          type: [string, "null"]
+        endDate:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        denId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        den:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        patrolId:
+          type: [number, "null"]
+        patrol:
+          type: [string, "null"]
+        unitId:
+          type: [number, "null"]
+        unitLong:
+          type: [string, "null"]
+        charterOrgName:
+          type: [string, "null"]
+        unit:
+          type: [string, "null"]
+        districtId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        district:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        councilId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        council:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        rankId:
+          type: [number, "null"]
+        rank:
+          type: [string, "null"]
+        image:
+          type: [string, "null"]
+        imageUrl50:
+          type: [string, "null"]
+        imageUrl100:
+          type: [string, "null"]
+        imageUrl200:
+          type: [string, "null"]
+        imageUrl400:
+          type: [string, "null"]
+        requestedDate:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        unitApproved:
+          type: [boolean, "null"]
+        approved:
+          type: [boolean, "null"]
+        approvalMessage:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        notes:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        defaultPosition:
+          type: [boolean, "null"]
+        available:
+          type: [boolean, "null"]
+        listType:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        rosterPending:
+          type: [boolean, "null"]
+        dateInvited:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        personalMessage:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        bsaMemberId:
+          type: [string, "null"]
+        numberOfDaysInPosition:
+          type: [number, "null"]
+
+    YouthMeritBadgeProgress:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: number
+        version:
+          type: [string, "null"]
+        versionId:
+          type: [string, "null"]
+        name:
+          type: [string, "null"]
+        short:
+          type: [string, "null"]
+        description:
+          type: [string, "null"]
+        meritBadgeCategoryId:
+          type: [number, "null"]
+        meritBadgeCategoryName:
+          type: [string, "null"]
+        bsaNumber:
+          type: [string, "null"]
+        imageFilename:
+          type: [string, "null"]
+        imageUrl50:
+          type: [string, "null"]
+        imageUrl100:
+          type: [string, "null"]
+        imageUrl200:
+          type: [string, "null"]
+        isEagleRequired:
+          type: [boolean, "null"]
+        centennial:
+          type: [boolean, "null"]
+        dateCreated:
+          type: [string, "null"]
+        dateDiscontinued:
+          type: [string, "null"]
+        lastUpdated:
+          type: [string, "null"]
+        adminNotes:
+          type: [string, "null"]
+        worksheetDOC:
+          type: [string, "null"]
+        worksheetPDF:
+          type: [string, "null"]
+        bsaPamphletNumber:
+          type: [string, "null"]
+        bsaPamphletEdition:
+          type: [string, "null"]
+        bsaPamphletImage:
+          type: [string, "null"]
+        bsaEmblemNumber:
+          type: [string, "null"]
+        bsaEmblemImage:
+          type: [string, "null"]
+        bsaRequirements:
+          type: [string, "null"]
+        pageURL:
+          type: [string, "null"]
+        searchKeywords:
+          type: [string, "null"]
+        sku:
+          type: [string, "null"]
+        price:
+          type: [number, "null"]
+        priceLastUpdated:
+          type: [string, "null"]
+        dateStarted:
+          type: [string, "null"]
+        leaderSignedUserId:
+          type: [string, "null"]
+        leaderSignedDate:
+          type: [string, "null"]
+        dateCompleted:
+          type: [string, "null"]
+        markedCompletedDate:
+          type: [string, "null"]
+        markedCompletedUserId:
+          type: [string, "null"]
+        markedCompletedFirstName:
+          type: [string, "null"]
+        markedCompletedLastName:
+          type: [string, "null"]
+        percentCompleted:
+          type: [number, "null"]
+        assignedCounselorUserId:
+          type: [string, "null"]
+        counselorApprovedUserId:
+          type: [string, "null"]
+        counselorApprovedFirstName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        counselorApprovedLastName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        counselorApprovedDate:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        leaderApprovedUserId:
+          type: [string, "null"]
+        leaderApprovedDate:
+          type: [string, "null"]
+        leaderApprovedFirstName:
+          type: [string, "null"]
+        leaderApprovedLastName:
+          type: [string, "null"]
+        checkedRecordedUserId:
+          type: [string, "null"]
+        checkedRecordedDate:
+          type: [string, "null"]
+        awardedDate:
+          type: [string, "null"]
+        awardedUserId:
+          type: [string, "null"]
+        awardedFirstName:
+          type: [string, "null"]
+        awardedLastName:
+          type: [string, "null"]
+        poid:
+          type: [string, "null"]
+        status:
+          type: [string, "null"]
+
+    YouthProgramRanks:
+      type: object
+      additionalProperties: false
+      properties:
+        programId:
+          type: [number, "null"]
+        program:
+          type: [string, "null"]
+        totalNumberOfRanks:
+          type: [number, "null"]
+        ranks:
+          type: array
+          items:
+            $ref: "#/components/schemas/YouthRankProgress"
+
+    YouthRankProgress:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: number
+        name:
+          type: [string, "null"]
+        versionId:
+          type: [number, "null"]
+        version:
+          type: [string, "null"]
+        dateEarned:
+          type: [string, "null"]
+        leaderApprovedUserId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        leaderApprovedDate:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        leaderApprovedFirstName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        leaderApprovedLastName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awarded:
+          type: [boolean, "null"]
+        poid:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        header:
+          type: [string, "null"]
+        footer:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        adminNotes:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        proofReadDate:
+          type: [string, "null"]
+        active:
+          type: [boolean, "null"]
+        disabledOnQuickEntry:
+          type: [boolean, "null"]
+        short:
+          type: [string, "null"]
+        reallyShort:
+          type: [string, "null"]
+        level:
+          type: [number, "null"]
+        image:
+          type: [string, "null"]
+        searchKeywords:
+          type: [string, "null"]
+        lds:
+          type: [boolean, "null"]
+        sku:
+          type: [number, "null"]
+        price:
+          type: [number, "null"]
+        priceLastUpdated:
+          type: [string, "null"]
+        scoutNet:
+          type: [string, "null"]
+        imageUrl50:
+          type: [string, "null"]
+        imageUrl100:
+          type: [string, "null"]
+        imageUrl200:
+          type: [string, "null"]
+        imageUrl400:
+          type: [string, "null"]
+        percentCompleted:
+          type: [number, "null"]
+        markedCompletedDate:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        markedCompletedUserId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        markedCompletedFirstName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        markedCompletedLastName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awardedDate:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awardedUserId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awardedFirstName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awardedLastName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        status:
+          type: [string, "null"]
+        programId:
+          type: [number, "null"]
+        program:
+          type: [string, "null"]
+
+    YouthRankRequirement:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: number
+        versionId:
+          type: [number, "null"]
+        name:
+          type: [string, "null"]
+        short:
+          type: [string, "null"]
+        listNumber:
+          type: [string, "null"]
+        requirementNumber:
+          type: [string, "null"]
+        sortOrder:
+          type: [string, "null"]
+        footer:
+          type: [string, "null"]
+        childrenRequired:
+          type: [string, "null"]
+        required:
+          type: [boolean, "null"]
+        parentRequirementId:
+          type: [integer, "null"]
+          description: The `id` of the parent requirement, or null on a top-level requirement
+        videoExternalURLId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        previousRankRequired:
+          type: [boolean, "null"]
+        monthsSinceLastRankRequired:
+          type: [string, "null"]
+        eagleMBRequired:
+          type: [string, "null"]
+        totalMBRequired:
+          type: [string, "null"]
+        serviceHoursRequired:
+          type: [string, "null"]
+        disabledOnQuickEntry:
+          type: [boolean, "null"]
+        linkedAdventureId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        linkedAwardId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        linkedMeritBadgeId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        electiveAdventure:
+          type: [boolean, "null"]
+        dateStarted:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        optional:
+          type: [boolean, "null"]
+        started:
+          type: [boolean, "null"]
+        completed:
+          type: [boolean, "null"]
+        linkedAdventure:
+          type: object
+          additionalProperties: false
+        linkedElectiveAdventures:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            description: Item shape not fully confirmed; accepted as an open object
+        eagleRequiredMeritBadges:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            description: Item shape not fully confirmed; accepted as an open object
+        nonEagleRequiredMeritBadges:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            description: Item shape not fully confirmed; accepted as an open object
+        linkedMeritBadge:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            description: Item shape not fully confirmed; accepted as an open object
+        linkedSSElective:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            description: Item shape not fully confirmed; accepted as an open object
+        linkedAward:
+          type: object
+          additionalProperties: false
+        percentCompleted:
+          type: [number, "null"]
+        status:
+          type: [string, "null"]
+        dateCompleted:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        leaderApprovedDate:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        leaderApprovedUserId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        leaderApprovedFirstName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        leaderApprovedLastName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        markedCompletedDate:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        markedCompletedUserId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        markedCompletedFirstName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        markedCompletedLastName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        dateEarned:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        requiresSSElective:
+          type: [boolean, "null"]
+
+    YouthRankRequirements:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: number
+        name:
+          type: [string, "null"]
+        versionId:
+          type: [number, "null"]
+        version:
+          type: [string, "null"]
+        dateEarned:
+          type: [string, "null"]
+        leaderApprovedUserId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        leaderApprovedDate:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        leaderApprovedFirstName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        leaderApprovedLastName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awarded:
+          type: [boolean, "null"]
+        poid:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        header:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        footer:
+          type: [string, "null"]
+        adminNotes:
+          type: [string, "null"]
+        proofReadDate:
+          type: [string, "null"]
+        active:
+          type: [boolean, "null"]
+        disabledOnQuickEntry:
+          type: [boolean, "null"]
+        short:
+          type: [string, "null"]
+        reallyShort:
+          type: [string, "null"]
+        level:
+          type: [number, "null"]
+        image:
+          type: [string, "null"]
+        searchKeywords:
+          type: [string, "null"]
+        lds:
+          type: [boolean, "null"]
+        sku:
+          type: [number, "null"]
+        price:
+          type: [number, "null"]
+        priceLastUpdated:
+          type: [string, "null"]
+        scoutNet:
+          type: [string, "null"]
+        imageUrl50:
+          type: [string, "null"]
+        imageUrl100:
+          type: [string, "null"]
+        imageUrl200:
+          type: [string, "null"]
+        imageUrl400:
+          type: [string, "null"]
+        percentCompleted:
+          type: [number, "null"]
+        markedCompletedDate:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        markedCompletedUserId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        markedCompletedFirstName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        markedCompletedLastName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awardedDate:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awardedUserId:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awardedFirstName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        awardedLastName:
+          type: [string, number, boolean, "null"]
+          description: Always null in the captured responses; the type is unconfirmed
+        status:
+          type: [string, "null"]
+        programId:
+          type: [number, "null"]
+        program:
+          type: [string, "null"]
+        requirements:
+          type: array
+          items:
+            $ref: "#/components/schemas/YouthRankRequirement"
+
+    YouthRanks:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: [string, "null"]
+        program:
+          type: array
+          items:
+            $ref: "#/components/schemas/YouthProgramRanks"
+
+    UserCalendar:
+      type: object
+      additionalProperties: false
+      required:
+        - userCalendarId
+        - userId
+        - unitId
+        - denId
+        - patrolId
+        - color
+        - showCalendar
+        - calendarCode
+      properties:
+        userCalendarId:
+          type: integer
+        userId:
+          type: integer
+        unitId:
+          type: integer
+        denId:
+          type: [integer, "null"]
+        patrolId:
+          type: [integer, "null"]
+        color:
+          type: string
+        showCalendar:
+          type: boolean
+        calendarCode:
+          type: string
+
+    EventInvitee:
+      type: object
+      additionalProperties: false
+      description: >-
+        A person invited to an event, as the event list gives them.
+      required:
+        - userId
+        - firstName
+        - lastName
+        - nickName
+        - rsvp
+        - attended
+        - primaryLeader
+        - rsvpCode
+        - isAdult
+        - profileImage
+        - canTakeAttendance
+        - isAdvancementUpdated
+        - akelaImage
+      properties:
+        userId:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        nickName:
+          type: string
+        rsvp:
+          type: [string, boolean]
+        attended:
+          type: boolean
+        primaryLeader:
+          type: boolean
+        rsvpCode:
+          type: string
+          description: >-
+            `Y` yes, `N` no, `M` maybe, or empty for no response
+        isAdult:
+          type: boolean
+        profileImage:
+          type: string
+        canTakeAttendance:
+          type: boolean
+        isAdvancementUpdated:
+          type: boolean
+        akelaImage:
+          type: string
+
+    EventDetailUser:
+      type: object
+      additionalProperties: false
+      description: >-
+        A person invited to an event, as the event detail gives them. The detail
+        endpoint gives `rsvp` as `null`; use `rsvpCode`.
+      required:
+        - userId
+        - firstName
+        - middleName
+        - lastName
+        - nickName
+        - memberId
+        - personGuid
+        - dateOfBirth
+        - gender
+        - rsvp
+        - attended
+        - primaryLeader
+        - rsvpCode
+        - isAdult
+        - isLeader
+        - isParent
+        - isParticipant
+        - profileImage
+        - isAdvancementUpdated
+        - noEmails
+        - akelaImage
+      properties:
+        userId:
+          type: integer
+        firstName:
+          type: string
+        middleName:
+          type: string
+        lastName:
+          type: string
+        nickName:
+          type: [string, "null"]
+        memberId:
+          type: [integer, "null"]
+        personGuid:
+          type: string
+        dateOfBirth:
+          type: string
+        gender:
+          type: string
+        rsvp:
+          type: [string, boolean, "null"]
+        attended:
+          type: boolean
+        primaryLeader:
+          type: boolean
+        rsvpCode:
+          type: [string, "null"]
+          description: >-
+            `Y` yes, `N` no, `M` maybe, or `null` for no response
+        isAdult:
+          type: boolean
+        isLeader:
+          type: boolean
+        isParent:
+          type: boolean
+        isParticipant:
+          type: boolean
+        profileImage:
+          type: string
+        isAdvancementUpdated:
+          type: boolean
+        noEmails:
+          type: boolean
+        akelaImage:
+          type: string
+
+    EventUnit:
+      type: object
+      additionalProperties: false
+      description: >-
+        A unit, den, or patrol an event is for. Only the event list gives `showDLEvents`.
+      required:
+        - id
+        - unitId
+        - unitFullName
+        - unitTypeId
+        - councilAcceptGender
+        - acceptGender
+        - denId
+        - denNumber
+        - denType
+        - patrolId
+        - patrolName
+      properties:
+        id:
+          type: integer
+        unitId:
+          type: integer
+        unitFullName:
+          type: string
+        unitTypeId:
+          type: integer
+        councilAcceptGender:
+          type: string
+        acceptGender:
+          type: string
+        denId:
+          type: [integer, "null"]
+        denNumber:
+          type: [string, "null"]
+        denType:
+          type: [string, "null"]
+        patrolId:
+          type: [integer, "null"]
+        patrolName:
+          type: [string, "null"]
+        showDLEvents:
+          type: [boolean, "null"]
+
+    EventReminder:
+      type: object
+      additionalProperties: false
+      required:
+        - reminderId
+        - hours
+        - dateSent
+        - reminderText
+        - reminderScheduleLookUpId
+        - reminderScheduleValue
+        - rsvp
+      properties:
+        reminderId:
+          type: integer
+        hours:
+          type: integer
+        dateSent:
+          type: [string, "null"]
+        reminderText:
+          type: [string, "null"]
+        reminderScheduleLookUpId:
+          type: [integer, "null"]
+        reminderScheduleValue:
+          type: [integer, "null"]
+        rsvp:
+          type: [string, "null"]
+
+    EventRecurrence:
+      type: object
+      additionalProperties: false
+      description: >-
+        The series a repeating event belongs to. `{}` for a one-off event.
+      properties:
+        recurringEventId:
+          type: integer
+        recurrenceId:
+          type: integer
+        recurrenceShort:
+          type: string
+        fromDate:
+          type: string
+        toDate:
+          type: string
+        fromTime:
+          type: string
+        toTime:
+          type: string
+        daysOfTheWeek:
+          type: [string, "null"]
+        dayOfTheMonth:
+          type: [integer, "null"]
+        monthOfTheYear:
+          type: [integer, "null"]
+        isCancelled:
+          type: boolean
+        lastModifiedBy:
+          type: string
+        lastModifiedDt:
+          type: string
+        createdBy:
+          type: string
+        createdDt:
+          type: string
+
+    UnconfirmedObject:
+      type: object
+      additionalProperties: true
+      description: >-
+        An item whose fields are unconfirmed, because every captured list was
+        empty.
+
+    CalendarEventListItem:
+      type: object
+      additionalProperties: false
+      description: >-
+        A calendar event as the event list gives it, with invitees in
+        `invitedUsers`.
+      required:
+        - id
+        - userId
+        - firstName
+        - lastName
+        - nickName
+        - dateCreated
+        - temp
+        - eventType
+        - startDate
+        - endDate
+        - numberOfDaysUntilEvent
+        - name
+        - location
+        - mapUrl
+        - isActivityMeeting
+        - activityTypeId
+        - activityType
+        - activityId
+        - lastUpdatedBy
+        - lastUpdatedDt
+        - description
+        - notes
+        - growthPlan
+        - serviceProject
+        - serviceProjectBenefit
+        - outdoorActivity
+        - parentOrientation
+        - budgetCompleted
+        - budgetIncludesScouts
+        - budgetScoutsParticipate
+        - budgetReviewed
+        - parentalInvolvement
+        - scoutStrong
+        - groupFitness
+        - fitnessCompetition
+        - myScoutingTools
+        - patrolTraining
+        - plansReviewedParents
+        - rsvp
+        - tourLeaderUserId
+        - slipsRequired
+        - isAdvancementMeeting
+        - advancementOrgMeetingId
+        - wordPressMeetingId
+        - isSequenceFixed
+        - isAttended
+        - userRsvp
+        - rsvpCode
+        - isAdvancementUpdated
+        - electiveGroupName
+        - electiveGroupSize
+        - meetingIcon
+        - isRequired
+        - demographicLookupId
+        - demographicLookupShort
+        - demographicLookupLong
+        - units
+        - invitedUsers
+        - recurringEvent
+        - linkedActivities
+        - linkedAdvancements
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        nickName:
+          type: string
+        dateCreated:
+          type: string
+        temp:
+          type: boolean
+        eventType:
+          type: string
+        startDate:
+          type: string
+        endDate:
+          type: string
+        numberOfDaysUntilEvent:
+          type: integer
+        name:
+          type: string
+        location:
+          type: [string, "null"]
+        mapUrl:
+          type: [string, "null"]
+        isActivityMeeting:
+          type: boolean
+        activityTypeId:
+          type: [integer, "null"]
+        activityType:
+          type: string
+        activityId:
+          type: [integer, "null"]
+        lastUpdatedBy:
+          type: string
+        lastUpdatedDt:
+          type: string
+        description:
+          type: [string, "null"]
+        notes:
+          type: [string, "null"]
+        growthPlan:
+          type: boolean
+        serviceProject:
+          type: boolean
+        serviceProjectBenefit:
+          type: boolean
+        outdoorActivity:
+          type: boolean
+        parentOrientation:
+          type: boolean
+        budgetCompleted:
+          type: boolean
+        budgetIncludesScouts:
+          type: boolean
+        budgetScoutsParticipate:
+          type: boolean
+        budgetReviewed:
+          type: boolean
+        parentalInvolvement:
+          type: boolean
+        scoutStrong:
+          type: boolean
+        groupFitness:
+          type: boolean
+        fitnessCompetition:
+          type: boolean
+        myScoutingTools:
+          type: boolean
+        patrolTraining:
+          type: boolean
+        plansReviewedParents:
+          type: boolean
+        rsvp:
+          type: boolean
+          description: >-
+            Whether RSVP is turned on for the event
+        tourLeaderUserId:
+          type: [integer, "null"]
+        slipsRequired:
+          type: boolean
+        isAdvancementMeeting:
+          type: boolean
+        advancementOrgMeetingId:
+          type: [integer, "null"]
+        wordPressMeetingId:
+          type: [integer, string, "null"]
+        isSequenceFixed:
+          type: [boolean, "null"]
+        isAttended:
+          type: [boolean, "null"]
+        userRsvp:
+          type: string
+        rsvpCode:
+          type: string
+          description: >-
+            The signed-in user's own response: `Y` yes, `N` no, `M` maybe, or empty for no response
+        isAdvancementUpdated:
+          type: [boolean, "null"]
+        electiveGroupName:
+          type: string
+        electiveGroupSize:
+          type: [integer, "null"]
+        meetingIcon:
+          type: string
+        isRequired:
+          type: [boolean, "null"]
+        demographicLookupId:
+          type: [integer, "null"]
+        demographicLookupShort:
+          type: [string, "null"]
+        demographicLookupLong:
+          type: [string, "null"]
+        units:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventUnit"
+        invitedUsers:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventInvitee"
+        recurringEvent:
+          $ref: "#/components/schemas/EventRecurrence"
+        linkedActivities:
+          type: array
+          items:
+            type: integer
+        linkedAdvancements:
+          type: array
+          items:
+            $ref: "#/components/schemas/UnconfirmedObject"
+
+    CalendarEventDetail:
+      type: object
+      additionalProperties: false
+      description: >-
+        A calendar event as the event detail gives it, with invitees in `users`.
+        The `userId`, `firstName`, `lastName`, and `nickName` fields describe the
+        person who created the event.
+      required:
+        - userId
+        - firstName
+        - lastName
+        - nickName
+        - dateCreated
+        - temp
+        - eventType
+        - startDate
+        - endDate
+        - name
+        - location
+        - mapUrl
+        - description
+        - notes
+        - growthPlan
+        - serviceProject
+        - serviceProjectBenefit
+        - outdoorActivity
+        - parentOrientation
+        - budgetCompleted
+        - budgetIncludesScouts
+        - budgetScoutsParticipate
+        - budgetReviewed
+        - parentalInvolvement
+        - scoutStrong
+        - groupFitness
+        - fitnessCompetition
+        - myScoutingTools
+        - patrolTraining
+        - plansReviewedParents
+        - rsvp
+        - tourLeaderUserId
+        - slipsRequired
+        - isAdvancementMeeting
+        - advancementOrgMeetingId
+        - wordPressMeetingId
+        - demographicLookupId
+        - demographicLookupShort
+        - demographicLookupLong
+        - reminders
+        - isActivityMeeting
+        - activityTypeId
+        - activityType
+        - activityId
+        - lastUpdatedBy
+        - lastUpdatedDt
+        - requirements
+        - units
+        - users
+        - linkedActivities
+        - recurringEvent
+      properties:
+        userId:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        nickName:
+          type: [string, "null"]
+        dateCreated:
+          type: string
+        temp:
+          type: boolean
+        eventType:
+          type: string
+        startDate:
+          type: string
+        endDate:
+          type: string
+        name:
+          type: string
+        location:
+          type: [string, "null"]
+        mapUrl:
+          type: [string, "null"]
+        description:
+          type: [string, "null"]
+        notes:
+          type: [string, "null"]
+        growthPlan:
+          type: boolean
+        serviceProject:
+          type: boolean
+        serviceProjectBenefit:
+          type: boolean
+        outdoorActivity:
+          type: boolean
+        parentOrientation:
+          type: boolean
+        budgetCompleted:
+          type: boolean
+        budgetIncludesScouts:
+          type: boolean
+        budgetScoutsParticipate:
+          type: boolean
+        budgetReviewed:
+          type: boolean
+        parentalInvolvement:
+          type: boolean
+        scoutStrong:
+          type: boolean
+        groupFitness:
+          type: boolean
+        fitnessCompetition:
+          type: boolean
+        myScoutingTools:
+          type: boolean
+        patrolTraining:
+          type: boolean
+        plansReviewedParents:
+          type: boolean
+        rsvp:
+          type: boolean
+          description: >-
+            Whether RSVP is turned on for the event
+        tourLeaderUserId:
+          type: [integer, "null"]
+        slipsRequired:
+          type: boolean
+        isAdvancementMeeting:
+          type: boolean
+        advancementOrgMeetingId:
+          type: [integer, "null"]
+        wordPressMeetingId:
+          type: [integer, string, "null"]
+        demographicLookupId:
+          type: [integer, "null"]
+        demographicLookupShort:
+          type: [string, "null"]
+        demographicLookupLong:
+          type: [string, "null"]
+        reminders:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventReminder"
+        isActivityMeeting:
+          type: boolean
+        activityTypeId:
+          type: [integer, "null"]
+        activityType:
+          type: string
+        activityId:
+          type: [integer, "null"]
+        lastUpdatedBy:
+          type: string
+        lastUpdatedDt:
+          type: string
+        requirements:
+          type: array
+          items:
+            $ref: "#/components/schemas/UnconfirmedObject"
+        units:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventUnit"
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventDetailUser"
+        linkedActivities:
+          type: array
+          items:
+            type: integer
+        recurringEvent:
+          $ref: "#/components/schemas/EventRecurrence"
+
   parameters:
     AdventureId:
       name: adventureId
@@ -11470,6 +13218,24 @@ components:
         type: integer
         minimum: 1
         examples: [1]
+
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: >-
+        A person's Scoutbook user ID, the `sbUserId` of the organization member
+        listings
+      schema:
+        $ref: "#/components/schemas/UserId"
+
+    EventId:
+      name: eventId
+      in: path
+      required: true
+      description: A calendar event ID, the `id` of an event from the event list
+      schema:
+        type: integer
 
   securitySchemes:
     bearer:

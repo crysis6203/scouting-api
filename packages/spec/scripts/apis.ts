@@ -24,6 +24,9 @@ function buildDocs(host: string): Promise<void> {
 		execFile(
 			"redocly",
 			["build-docs", specPath(host), "-o", `${OUT_DIR}/${host}/index.html`],
+			// On Windows, redocly is a .cmd shim that only a shell can start. The
+			// arguments are plain paths, so the shell has nothing to mangle.
+			{ shell: true },
 			(error, _stdout, stderr) => {
 				if (error) reject(new Error(stderr || error.message));
 				else resolve();

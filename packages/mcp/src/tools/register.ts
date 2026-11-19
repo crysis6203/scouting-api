@@ -1,9 +1,23 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { ScoutingClient } from "scouting-api";
 import { operations as apiOperations } from "./generated/api.scouting.org/index.ts";
+import { auditCalendar } from "./custom/auditCalendar.ts";
+import { auditCall } from "./custom/auditCall.ts";
+import { eventContacts } from "./custom/eventContacts.ts";
+import { eventRsvps } from "./custom/eventRsvps.ts";
+import { looseOutput } from "./looseOutput.ts";
+import { remainingRequirements } from "./custom/remainingRequirements.ts";
 import { operations as scoutConnectOperations } from "./generated/scoutconnect-api.scouting.org/index.ts";
 
-const operations = [...apiOperations, ...scoutConnectOperations];
+const operations = [
+	...apiOperations,
+	...scoutConnectOperations,
+	remainingRequirements,
+	eventRsvps,
+	eventContacts,
+	// Debug only: crawls the API and checks raw responses against the spec
+	...(process.env["SCOUTING_AUDIT"] ? [auditCalendar, auditCall] : []),
+];
 
 // Without a sign-in, leaves out the tools that need one
 export function registerTools(
@@ -19,7 +33,7 @@ export function registerTools(
 				title: operation.title,
 				description: operation.description,
 				inputSchema: operation.input,
-				outputSchema: operation.output,
+				outputSchema: operation.output && looseOutput(operation.output),
 				annotations: {
 					readOnlyHint: operation.readOnly ?? undefined,
 				},

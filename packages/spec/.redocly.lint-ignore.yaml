@@ -45,5 +45,16 @@ apis/api.scouting.org/openapi.yaml:
       #/paths/~1advancements~1v2~1ranks~1{rankId}/get/responses/200/content/application~1json/schema/additionalProperties
     - >-
       #/components/schemas/RankV2Requirement/properties/linkedAdventure/additionalProperties
+    - '#/components/schemas/UnconfirmedObject/additionalProperties'
+    - >-
+      #/components/schemas/YouthRankRequirement/properties/linkedElectiveAdventures/items/additionalProperties
+    - >-
+      #/components/schemas/YouthRankRequirement/properties/eagleRequiredMeritBadges/items/additionalProperties
+    - >-
+      #/components/schemas/YouthRankRequirement/properties/nonEagleRequiredMeritBadges/items/additionalProperties
+    - >-
+      #/components/schemas/YouthRankRequirement/properties/linkedMeritBadge/items/additionalProperties
+    - >-
+      #/components/schemas/YouthRankRequirement/properties/linkedSSElective/items/additionalProperties
     - >-
       #/components/schemas/UnitParent/properties/parentInformation/additionalProperties
