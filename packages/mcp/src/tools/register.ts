@@ -9,6 +9,8 @@ import { eventContacts } from "./custom/eventContacts.ts";
 import { eventRsvps } from "./custom/eventRsvps.ts";
 import { contactLookup } from "./custom/contactLookup.ts";
 import { meritBadgeProgress } from "./custom/meritBadgeProgress.ts";
+import { personProfileTool } from "./custom/personProfile.ts";
+import { troopBalances } from "./custom/troopBalances.ts";
 import { troopAdvancement } from "./custom/troopAdvancement.ts";
 import { troopRoster } from "./custom/troopRoster.ts";
 import { looseOutput } from "./looseOutput.ts";
@@ -25,6 +27,8 @@ const operations = [
 	meritBadgeProgress,
 	contactLookup,
 	troopRoster,
+	personProfileTool,
+	troopBalances,
 	// Debug only: crawls the API and checks raw responses against the spec
 	...(process.env["SCOUTING_AUDIT"] ? [auditAdvancement, auditCalendar, auditCall, auditRaw] : []),
 ];

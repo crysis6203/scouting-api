@@ -2181,6 +2181,16 @@ paths:
           description: The unit's organization GUID
           schema:
             $ref: "#/components/schemas/OrganizationGuid"
+        - name: fromDate
+          in: query
+          description: First day to include, as YYYY-MM-DD. The API requires fromDate or toDate.
+          schema:
+            type: string
+        - name: toDate
+          in: query
+          description: Last day to include, as YYYY-MM-DD. The API requires fromDate or toDate.
+          schema:
+            type: string
       responses:
         "200":
           description: The response body, not yet described field by field

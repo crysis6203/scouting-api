@@ -73,12 +73,15 @@ export async function troopYouth(
 
 export function findPeople(people: Any[], query: string): Any[] {
 	const q = norm(query);
+	const tokens = q.split(" ").filter(Boolean);
 	return people.filter((m) => {
 		const full = norm(`${m.firstName} ${m.lastName}`);
 		const nick = norm(`${m.nickName ?? ""} ${m.lastName}`);
-		return (
-			norm(m.personFullName).includes(q) || full.includes(q) || nick.includes(q)
-		);
+		if (norm(m.personFullName).includes(q) || full.includes(q) || nick.includes(q)) return true;
+		// Every word of the query appears somewhere in first, middle, nick or last name,
+		// so "Mack Beard" finds a first name stored as "Mack Wayne"
+		const hay = norm(`${m.firstName} ${m.middleName ?? ""} ${m.nickName ?? ""} ${m.lastName}`);
+		return tokens.length > 1 && tokens.every((t) => hay.includes(t));
 	});
 }
 
@@ -92,6 +95,10 @@ export function scoutsBsaRanks(data: Any): Any[] {
 }
 export const isAwarded = (r: Any) =>
 	Boolean(r.awarded) || r.status === "Awarded" || Boolean(r.awardedDate);
+
+// The date the rank was earned (approved), as opposed to awarded at a court of honor
+export const earnedDate = (r: Any) =>
+	day(r.leaderApprovedDate) ?? day(r.dateEarned) ?? day(r.awardedDate);
 
 export const rankDate = (r: Any) =>
 	day(r.awardedDate) ?? day(r.dateEarned) ?? day(r.leaderApprovedDate);
@@ -114,4 +121,26 @@ export async function retry(
 		await sleep(500 * (i + 1));
 	}
 	return last;
+}
+
+// Raw GET with the signed-in session, for endpoints that are not in the spec yet
+export async function rawGet(api: Any, url: string, query?: Record<string, string>): Promise<Any> {
+	const client = (api.advancement ?? api.organizations)?.client;
+	if (!client?.get) return { error: "No HTTP client available on the SDK." };
+	return retry(() =>
+		client.get({
+			url,
+			query,
+			security: [{ scheme: "bearer", type: "http" }],
+			responseValidator: undefined,
+			parseAs: "json",
+		}),
+	);
+}
+
+// A person's own profile: emails, phones, swim classification and health form dates
+export async function personProfile(api: Any, personGuid: string): Promise<Any> {
+	const res = await rawGet(api, `/persons/v2/${String(personGuid).toUpperCase()}/personprofile`);
+	if (res.error !== undefined) return { error: res.error, status: res.response?.status };
+	return { data: res.data };
 }

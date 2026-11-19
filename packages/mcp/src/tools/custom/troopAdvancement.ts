@@ -13,6 +13,7 @@ import {
 	orgGuidOf,
 	pool,
 	rankDate,
+	earnedDate,
 	retry,
 	scoutsBsaRanks,
 	troopYouth,
@@ -137,11 +138,12 @@ async function run(scouting: Any, args: Any): Promise<Any> {
 					return null;
 				}
 				const sum = rankSummary(r.data);
-				const lastDate = sum.current ? rankDate(sum.current) : null;
+				const lastDate = sum.current ? earnedDate(sum.current) : null;
 				const row: Any = {
 					scout: nameOf(s),
 					rank: sum.current?.name ?? "No rank yet",
 					earned: lastDate,
+					awarded: sum.current ? rankDate(sum.current) : null,
 					daysSinceLastRank: lastDate
 						? daysBetween(new Date(lastDate), new Date())
 						: null,
@@ -156,7 +158,7 @@ async function run(scouting: Any, args: Any): Promise<Any> {
 					row.rankDates = Object.fromEntries(
 						sum.ranks
 							.filter(isAwarded)
-							.map((x: Any) => [x.name, rankDate(x)]),
+							.map((x: Any) => [x.name, { earned: earnedDate(x), awarded: rankDate(x) }]),
 					);
 					row.positionHistory = h.error
 						? undefined
@@ -281,8 +283,7 @@ async function run(scouting: Any, args: Any): Promise<Any> {
 				three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, twelve: 12,
 			};
 			const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
-			const earnedOn = (r: Any) =>
-				day(r.leaderApprovedDate) ?? day(r.dateEarned) ?? day(r.awardedDate);
+			const earnedOn = earnedDate;
 			const rows = await pool(scouts, 4, async (s: Any) => {
 				const r = await retry(() => api.advancement.listYouthRanks({ userId: s.sbUserId }));
 				if (r.error) {

@@ -1,13 +1,13 @@
 import { z } from "zod";
 import { defineTool } from "../define.ts";
 import { leaderContacts } from "./eventContacts.ts";
-import { type Any, findPeople, nameOf, norm, orgGuidOf, troopYouth } from "./troopCommon.ts";
+import { type Any, findPeople, nameOf, norm, orgGuidOf, personProfile, troopYouth } from "./troopCommon.ts";
 
 export const contactLookup = defineTool({
 	name: "contactLookup",
 	title: "Look up a scout's or leader's contact details",
 	description:
-		"Finds a scout or adult by name and returns phone numbers and emails. Scoutbook keeps contact details on parents, not scouts, so for a scout this returns his parents' emails and phones. For an adult it returns their own details when they are a parent of a troop scout, or from the local leader contact file. Use for 'what is Keaton's email?' or 'what is Mr. Phibbs' phone number?'.",
+		"Finds a scout or adult by name and returns phone numbers and emails. For a scout this returns his own email and phone from his profile (if he has them) and his parents' emails and phones. For an adult it returns their own details when they are a parent of a troop scout, or from the local leader contact file. Use for 'what is Keaton's email?' or 'what is Mr. Phibbs' phone number?'.",
 	readOnly: true,
 	requiresAuth: true,
 	input: z.object({
@@ -61,13 +61,25 @@ export const contactLookup = defineTool({
 		const results: Any[] = [];
 		for (const s of findPeople(roster.scouts, args.name)) {
 			const parents = parentsOf.get(s.sbUserId) ?? [];
+			// The scout's own contact details live on his profile, not in the parent list
+			let own: Any = null;
+			if (s.personGuid) {
+				const pr = await personProfile(api, s.personGuid);
+				if (!pr.error) {
+					own = {
+						emails: (pr.data.emails ?? []).map((e: Any) => e.email).filter(Boolean),
+						phones: (pr.data.phones ?? []).map((p: Any) => p.fullPhoneNumber).filter(Boolean),
+					};
+				}
+			}
 			results.push({
 				name: nameOf(s),
 				type: "scout",
+				own,
 				parents,
-				note: parents.length
-					? "Scoutbook stores no email or phone for the scout himself, so these are his parents'."
-					: "No parent contact records found for this scout.",
+				note: own
+					? "'own' is the scout's own profile; 'parents' are his parents' records."
+					: "Could not read the scout's own profile, so only his parents' details are shown.",
 			});
 		}
 
