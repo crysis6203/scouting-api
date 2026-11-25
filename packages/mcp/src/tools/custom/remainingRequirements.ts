@@ -110,6 +110,7 @@ export const remainingRequirements = defineTool({
 
 		let rankId: number;
 		let result: Any;
+		const awaitingAward: string[] = [];
 		if (args.rank) {
 			const rank = RANKS[args.rank.toLowerCase().trim()];
 			if (!rank) {
@@ -124,7 +125,14 @@ export const remainingRequirements = defineTool({
 		} else {
 			rankId = 1;
 			result = await fetchRank(rankId);
-			while (!result.error && result.data.awarded && rankId < 7) {
+			// Skip ranks that are awarded, or fully approved and only waiting
+			// for the award, so the answer is about the rank still being worked
+			while (
+				!result.error &&
+				(result.data.awarded || Number(result.data.percentCompleted) >= 1) &&
+				rankId < 7
+			) {
+				if (!result.data.awarded) awaitingAward.push(result.data.name);
 				rankId += 1;
 				result = await fetchRank(rankId);
 			}
@@ -188,6 +196,7 @@ export const remainingRequirements = defineTool({
 				scout: scout.personFullName,
 				rank: data.name,
 				rankId,
+				awaitingAward: awaitingAward.length ? awaitingAward : undefined,
 				rankStatus: data.status,
 				awarded: Boolean(data.awarded),
 				scoutbookPercentCompleted: data.percentCompleted,

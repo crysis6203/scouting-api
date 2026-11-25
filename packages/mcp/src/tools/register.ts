@@ -13,6 +13,7 @@ import { meritBadgeCounselors } from "./custom/meritBadgeCounselors.ts";
 import { personProfileTool } from "./custom/personProfile.ts";
 import { newsletterFeed } from "./custom/newsletterFeed.ts";
 import { trailheadPull } from "./custom/trailheadPull.ts";
+import { scoutLedger } from "./custom/scoutLedger.ts";
 import { troopBalances } from "./custom/troopBalances.ts";
 import { troopAdvancement } from "./custom/troopAdvancement.ts";
 import { troopRoster } from "./custom/troopRoster.ts";
@@ -33,6 +34,7 @@ const operations = [
 	personProfileTool,
 	meritBadgeCounselors,
 	troopBalances,
+	scoutLedger,
 	newsletterFeed,
 	trailheadPull,
 	// Debug only: crawls the API and checks raw responses against the spec

@@ -2258,6 +2258,81 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /advancements/v2/organization/{organizationGuid}/paymentLogs:
+    get:
+      tags: [Advancement]
+      operationId: getUnitPaymentLogs
+      x-untested: Results depend on the signed-in account's positions and units
+      summary: List a unit's payment log entries
+      description: >-
+        Returns the unit's account ledger: its dated charges, payments and
+        credits. Charges have a negative `amount`; payments and credits a
+        positive one. Send at least one of `fromDate` and `toDate`; with
+        neither, the API answers 400. Dates filter on `logDate`. A unit that
+        doesn't exist, or one the signed-in account can't read, answers 403.
+      security:
+        - bearer: []
+      parameters:
+        - name: organizationGuid
+          in: path
+          required: true
+          description: The unit's organization GUID
+          schema:
+            $ref: "#/components/schemas/OrganizationGuid"
+        - name: fromDate
+          in: query
+          description: First `logDate` to include, as yyyy-MM-dd
+          schema:
+            type: string
+        - name: toDate
+          in: query
+          description: Last `logDate` to include, as yyyy-MM-dd
+          schema:
+            type: string
+        - name: userId
+          in: query
+          description: Only entries for this person, a Scoutbook user ID
+          schema:
+            $ref: "#/components/schemas/UserId"
+      responses:
+        "200":
+          description: The ledger entries in the date range
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PaymentLog"
+        "400":
+          description: Neither date was sent, or a date isn't yyyy-MM-dd
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                noDates:
+                  summary: Neither `fromDate` nor `toDate`
+                  value:
+                    errorCode: M400
+                    message: Invalid Request
+                    errorDesc: One of fromDate or toDate parameter should be provided.
+                badDate:
+                  summary: A date that isn't yyyy-MM-dd
+                  value:
+                    errorCode: M400
+                    message: Bad Request
+                    errorDesc: "Invalid value 'notadate' for query parameter fromDate. [notadate] is not a valid date. Expected [yyyy-MM-dd]"
+        "403":
+          description: The signed-in account can't read this unit's ledger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                errorCode: M403
+                message: Forbidden
+                errorDesc: User is not authorized to access this API
+
   /advancements/v2/youth/{userId}/ranks:
     get:
       tags: [Advancement]
@@ -11773,6 +11848,112 @@ components:
         errorDesc:
           type: string
           examples: [Query parameter id is not repeatable]
+
+    PaymentLog:
+      type: object
+      additionalProperties: false
+      required:
+        - paymentLogId
+        - userId
+        - firstName
+        - middleName
+        - lastName
+        - nameSuffix
+        - nickName
+        - memberId
+        - personGuid
+        - isAdult
+        - unitId
+        - paymentType
+        - logDate
+        - description
+        - amount
+        - amountPaid
+        - isPaid
+        - paymentGatewayStatus
+        - transactionId
+        - category
+        - calendarEventId
+        - applyPaymentLogId
+        - notes
+        - deleted
+        - isSbActiveMember
+        - paymentDueDate
+        - payoutBatchId
+      properties:
+        paymentLogId:
+          type: integer
+        userId:
+          $ref: "#/components/schemas/UserId"
+        firstName:
+          type: string
+        middleName:
+          type: string
+          description: Empty when the member has none
+        lastName:
+          type: string
+        nameSuffix:
+          type: string
+        nickName:
+          type: string
+        memberId:
+          type: [integer, "null"]
+        personGuid:
+          type: [string, "null"]
+        isAdult:
+          type: boolean
+        unitId:
+          type: integer
+          description: >-
+            The unit's numeric ID, as taken by the payment log categories
+            endpoint
+        paymentType:
+          type: string
+          description: >-
+            `Charge`, `Payment`, `Credit` or `Online`. `Online` is a card payment
+            made through Scoutbook; its `applyPaymentLogId` points to the charge
+            it pays.
+        logDate:
+          type: string
+          description: The entry's date, as yyyy-MM-dd
+        description:
+          type: string
+        amount:
+          type: number
+          description: Negative for a charge, positive for a payment or credit
+        amountPaid:
+          type: [number, "null"]
+        isPaid:
+          type: [boolean, "null"]
+        paymentGatewayStatus:
+          type: [string, "null"]
+          description: >-
+            Set on `Online` payments. `succeeded` was seen on completed card
+            payments, which also have a `pi_` `transactionId` and an `amountPaid`.
+            `null` was seen on `Online` entries that were started and never
+            completed, and the reported balance leaves those out.
+        transactionId:
+          type: [string, "null"]
+        category:
+          type: string
+          description: >-
+            A category name from the unit's payment log categories, or empty
+        calendarEventId:
+          type: [integer, "null"]
+          description: The calendar event the entry is for, an event `id`
+        applyPaymentLogId:
+          type: [integer, "null"]
+          description: The `paymentLogId` of another entry in the same ledger
+        notes:
+          type: string
+        deleted:
+          type: boolean
+        isSbActiveMember:
+          type: boolean
+        paymentDueDate:
+          type: string
+        payoutBatchId:
+          type: "null"
 
     YouthAdventureProgress:
       type: object

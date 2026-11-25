@@ -10,7 +10,7 @@ type Leaf = { path: PropertyKey[]; message: string };
 
 // Union errors nest one issue list per branch. Keep the branch with the
 // fewest problems, since that is the one the data was closest to.
-function leaves(issues: Any[], base: PropertyKey[] = []): Leaf[] {
+export function leaves(issues: Any[], base: PropertyKey[] = []): Leaf[] {
 	return issues.flatMap((i): Leaf[] => {
 		const path = [...base, ...(i.path ?? [])];
 		if (i.code === "invalid_union" && Array.isArray(i.errors)) {
@@ -24,13 +24,13 @@ function leaves(issues: Any[], base: PropertyKey[] = []): Leaf[] {
 	});
 }
 
-const norm = (path: PropertyKey[]) =>
+export const norm = (path: PropertyKey[]) =>
 	path.map((p) => (typeof p === "number" ? "[]" : `.${String(p)}`)).join("").replace(/^\./, "");
 
-const typeOf = (v: unknown) =>
+export const typeOf = (v: unknown) =>
 	v === null ? "null" : Array.isArray(v) ? "array" : typeof v;
 
-function inventory(v: unknown, path: string, into: Map<string, Map<string, number>>) {
+export function inventory(v: unknown, path: string, into: Map<string, Map<string, number>>) {
 	const t = typeOf(v);
 	const m = into.get(path) ?? new Map<string, number>();
 	m.set(t, (m.get(t) ?? 0) + 1);
@@ -46,7 +46,7 @@ function inventory(v: unknown, path: string, into: Map<string, Map<string, numbe
 
 // Finds `scouting.<sdk>.<tag>.<operation>` without knowing the tag. Tags are
 // getters on the SDK's prototype, so Object.keys would miss them.
-function findMethod(root: Any, name: string): ((...a: Any[]) => Promise<Any>) | undefined {
+export function findMethod(root: Any, name: string): ((...a: Any[]) => Promise<Any>) | undefined {
 	for (const sdk of Object.values(root) as Any[]) {
 		const proto = Object.getPrototypeOf(sdk);
 		for (const tag of Object.getOwnPropertyNames(proto)) {
